@@ -16,6 +16,11 @@ for (const mode of ['tags', 'json']) {
         'apply rap cadence only to rap passages',
         'Keep clean lines clean',
         'explicit wording alone never triggers RAP MODE',
+        'Street narratives and dense rhyme chains are not requirements',
+        'assess emotional stance separately from rap cadence',
+        'EMO / INTROSPECTIVE RAP',
+        'Profanity can express despair, emphasis or self-directed anger',
+        'Rap cadence does not require street vocabulary',
         'PRONOUN LOCK'
     ]) assert.ok(prompt.includes(rule), `Missing ${mode} rule: ${rule}`);
     assert.ok(!prompt.includes('RAP FLOW & ATTITUDE RULES'));
