@@ -43,6 +43,25 @@ Ngày đối chiếu: 14/10/2026. Phạm vi: bổ sung prompt dịch, không xâ
 
 ## Giới hạn nghiên cứu
 
+## Bổ sung nghĩa theo cụm: aura và từ quen dễ dịch sai
+
+| Mục | Cách phân biệt và lựa chọn tiếng Việt | Nguồn đối chiếu |
+|---|---|---|
+| aura | Khí chất/thần thái/cái chất khi nói về ấn tượng toát ra. Trong cụm nói trải nghiệm làm thay đổi bản thân, con người/cách sống có thể hợp hơn nếu ngữ cảnh hỗ trợ. Không cố định thành tính cách hoặc hào quang; không áp meme điểm aura vào mọi bài. | [Merriam-Webster, nghĩa thường](https://www.merriam-webster.com/dictionary/aura), [nghĩa slang](https://scrabble.m-w.com/slang/aura) |
+| vibe / vibes | Cảm giác, bầu không khí, cái chất tùy đối tượng được mô tả; không mặc định rung động vật lý. | [Merriam-Webster](https://www.merriam-webster.com/dictionary/vibe) |
+| drip / dripping | Phong cách, đồ chất khi nói thời trang; cụm diện đồ thương hiệu cho một người cần giữ đúng người thực hiện hành động. Giữ nghĩa nhỏ giọt nếu thực sự có chất lỏng. | [Dictionary.com](https://www.dictionary.com/culture/slang/drip) |
+| shade / throw shade | Đá xoáy/nói móc trong tương tác; bóng râm/sắc độ ở nghĩa thường. Đừng tăng một lời mỉa gián tiếp thành chửi trực diện. | [Dictionary.com](https://www.dictionary.com/culture/slang/throwing-shade) |
+| tea / spill the tea | Chuyện bàn tán/thông tin riêng và kể chuyện khi nói gossip; trà/làm đổ trà khi thực sự có đồ uống. Không tự thêm bê bối. | [Dictionary.com](https://www.dictionary.com/culture/slang/tea) |
+| salty | Cay cú/bực bội/ấm ức khi bị chạm tự ái hoặc thua; mặn khi nói vị. Không đồng nhất với ghen tuông. | [Dictionary.com](https://www.dictionary.com/browse/salty) |
+| sick | Đỉnh/quá chất khi khen; ốm/buồn nôn ở nghĩa sức khỏe; chán ngấy trong sick of. Phải giữ sắc thái tiêu cực nếu câu thực sự chê điều bệnh hoạn. | [Merriam-Webster](https://www.merriam-webster.com/dictionary/sick), [Dictionary.com](https://www.dictionary.com/browse/sick) |
+| cold | Lạnh lùng/lạnh nhạt khi mô tả cảm xúc; lạnh khi nói nhiệt độ. Giữ hình ảnh lạnh nếu nó còn đóng vai trò ẩn dụ. | [Merriam-Webster](https://www.merriam-webster.com/dictionary/cold) |
+
+Ảnh người dùng cung cấp có ngữ cảnh tổn thương rồi thay đổi aura. Đọc theo thay đổi khí chất hoặc con người là một diễn giải theo đoạn, không phải xác nhận tác giả muốn nói về đặc điểm tâm lý cụ thể. Chọn cách nói gọn như những chuyện ấy khiến bản thân không còn như trước có thể tự nhiên hơn, nhưng không được bịa chiều hướng thay đổi.
+
+Trong cùng ảnh, cụm explore/no Dora có tham chiếu nhân vật. [Nickelodeon giới thiệu Dora là nhà thám hiểm](https://www.nickanimation.com/content/dora-the-explorer/). Cách đọc đây là trò chơi chữ là suy luận từ cụm được cung cấp; giữ Dora thay vì tự đổi thành bản đồ. Không thêm giải thích vào phụ đề.
+
+Đã bổ sung 8 mục vào GENERAL_SLANG_LEXICON_VI và luật chọn nghĩa theo đối tượng, động từ, từ bổ nghĩa, các hình ảnh liền kề và cảm xúc. Bộ từ áp dụng ở mọi style dịch tiếng Việt; quy tắc chọn nghĩa chung áp dụng ở mọi ngôn ngữ. Không đổi xưng hô, cache hay API.
+
 Đây là tập bổ sung có nguồn cho các lỗi và trường hợp thường gặp, không phải từ điển slang đầy đủ. Một số trang ate/down bad và các đường dẫn Cambridge không đọc được; không thêm các mục đó dưới danh nghĩa đã đối chiếu thành công. Không sao chép chú giải bài hát hay dùng ví dụ Like That làm quy tắc áp đặt cho bài khác.
 
 ## Sửa Auto xưng hô theo phản hồi Receipts

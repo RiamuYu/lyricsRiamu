@@ -42,8 +42,15 @@ for (const language of ['vi', 'en', 'ja', 'ko', 'zh', 'uk']) {
             assert.ok(prompt.includes('retain the ambiguity'));
             assert.ok(prompt.includes('take precedence over any style instruction permitting loss of detail'));
             assert.ok(prompt.includes('SLANG, ABBREVIATIONS & DOUBLE MEANINGS — EVERY GENRE'));
+            assert.ok(prompt.includes('SENSE SELECTION: Check what the word describes'));
+            assert.ok(prompt.includes('not the first dictionary gloss or the newest viral definition'));
+            assert.ok(prompt.includes('Preserve names and cultural references'));
             assert.equal(prompt.includes('GENERAL SLANG & ABBREVIATIONS — VIETNAMESE'), language === 'vi');
             if (language === 'vi') {
+                for (const term of ['aura =', 'vibe / vibes =', 'drip / dripping =', 'shade / throw shade =', 'tea / spill the tea =', 'salty =', 'sick =', 'cold =']) {
+                    assert.ok(prompt.includes(term), `Missing contextual sense: ${term}`);
+                }
+                assert.ok(prompt.includes('Do not equate aura with "tính cách" in every sentence'));
                 assert.ok(prompt.includes('GOAT / G.O.A.T. = greatest of all time'));
                 assert.ok(prompt.includes('Do not render it as "ly"'));
                 assert.ok(prompt.includes('Do not add "chết" unless death is stated'));
