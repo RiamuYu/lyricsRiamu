@@ -68,8 +68,8 @@ Resolve errors before continuing. Installation commands are based on the [offici
 
 ### Step 3 — Download the standalone source
 
-1. On **this standalone repository**, use **Code → Download ZIP**, or obtain the source archive supplied by its maintainer. This document does not assume a published repository URL.
-2. Extract the archive and locate the folder directly containing `index.js` and `manifest.json`. Rename that folder **lyrics-plus** if necessary.
+1. On the **lyricsRiamu** repository, choose **Code → Download ZIP**. Downloading the main branch produces an archive named `lyricsRiamu-main.zip`, which extracts to **lyricsRiamu-main**. This document does not assume a published repository URL.
+2. Open **lyricsRiamu-main** and locate `index.js` and `manifest.json`. You can keep this downloaded/repository folder name; the installation folder in CustomApps must be named **lyrics-plus** for the current app configuration.
 3. Keep all runtime folders: `components`, `utils`, `services`, `providers`, `parsers`, `i18n`, `assets`, and the CSS files. Copying only `index.js` is insufficient.
 4. Back up existing customized source separately. Do not replace it with the stock/upstream app.
 
@@ -81,7 +81,7 @@ Find Spicetify's user-data directory:
 spicetify path userdata
 ```
 
-Inside the printed directory, open/create **CustomApps** and copy **lyrics-plus** there. Windows setups may use `%AppData%\spicetify\CustomApps`; bundled apps can also exist under `%LocalAppData%\spicetify\CustomApps`. These are different locations.
+Inside the printed directory, open/create **CustomApps/lyrics-plus**. Copy **all contents of lyricsRiamu-main** into that folder, including its subfolders. Alternatively, copy the entire **lyricsRiamu-main** folder into CustomApps and rename that copy to **lyrics-plus**. Windows setups may use `%AppData%\spicetify\CustomApps`; bundled apps can also exist under `%LocalAppData%\spicetify\CustomApps`. These are different locations.
 
 ```text
 CustomApps/
@@ -96,7 +96,7 @@ CustomApps/
     └── ... remaining folders and files
 ```
 
-Correct: `CustomApps/lyrics-plus/manifest.json`. Incorrect: `CustomApps/lyrics-plus/lyrics-plus/manifest.json`.
+Correct: `CustomApps/lyrics-plus/manifest.json`. Incorrect: `CustomApps/lyrics-plus/lyricsRiamu-main/manifest.json` or `CustomApps/lyrics-plus/lyrics-plus/manifest.json`.
 
 Register the app and load its files:
 

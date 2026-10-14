@@ -69,8 +69,8 @@ Nếu có lỗi, xử lý ở bảng cuối hướng dẫn rồi mới tiếp t�
 
 ### Bước 3 — Tải đúng source standalone
 
-1. Tại repository của **bản standalone này**, chọn **Code → Download ZIP**, hoặc tải gói source do người duy trì cung cấp. Repo chưa có URL cố định trong tài liệu này.
-2. Giải nén ZIP. Tìm thư mục trực tiếp chứa `index.js` và `manifest.json`; đổi tên thư mục đó thành **lyrics-plus** nếu cần.
+1. Tại repository **lyricsRiamu**, chọn **Code → Download ZIP**. Khi tải nhánh main, file ZIP có tên `lyricsRiamu-main.zip`; giải nén được thư mục **lyricsRiamu-main**. Repo chưa có URL cố định trong tài liệu này.
+2. Mở **lyricsRiamu-main**, tìm `index.js` và `manifest.json`. Có thể giữ nguyên tên thư mục tải về/repo; riêng thư mục cài trong CustomApps cần tên **lyrics-plus** theo cấu hình app hiện tại.
 3. Giữ cả `components`, `utils`, `services`, `providers`, `parsers`, `i18n`, `assets` và các file CSS. Không chỉ chép mỗi `index.js`.
 4. Sao lưu riêng source custom đang có. Không tải lại bản stock/upstream để thay bản standalone.
 
@@ -82,7 +82,7 @@ Xem thư mục dữ liệu của Spicetify:
 spicetify path userdata
 ```
 
-Trong thư mục được in ra, mở hoặc tạo **CustomApps**, rồi chép thư mục **lyrics-plus** vào đó. Trên Windows, vị trí có thể là `%AppData%\spicetify\CustomApps`; một số cài đặt còn có app đi kèm tại `%LocalAppData%\spicetify\CustomApps`. Không mặc định rằng hai vị trí này là một.
+Trong thư mục được in ra, mở hoặc tạo **CustomApps/lyrics-plus**. Chép **toàn bộ nội dung bên trong lyricsRiamu-main** vào đó, gồm cả các thư mục con. Hoặc chép nguyên **lyricsRiamu-main** vào CustomApps rồi đổi tên bản chép thành **lyrics-plus**. Trên Windows, vị trí có thể là `%AppData%\spicetify\CustomApps`; một số cài đặt còn có app đi kèm tại `%LocalAppData%\spicetify\CustomApps`. Không mặc định rằng hai vị trí này là một.
 
 ```text
 CustomApps/
@@ -97,7 +97,7 @@ CustomApps/
     └── ... các thư mục và file còn lại
 ```
 
-Đúng: `CustomApps/lyrics-plus/manifest.json`. Sai: `CustomApps/lyrics-plus/lyrics-plus/manifest.json`.
+Đúng: `CustomApps/lyrics-plus/manifest.json`. Sai: `CustomApps/lyrics-plus/lyricsRiamu-main/manifest.json` hoặc `CustomApps/lyrics-plus/lyrics-plus/manifest.json`.
 
 Đăng ký app và nạp file:
 
