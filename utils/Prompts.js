@@ -64,7 +64,7 @@ const STREET_FLOW_RULES = `RAP FLOW & ATTITUDE RULES:
 2) Syllable match: keep each Vietnamese line within +/-2 syllables of the English line (Vietnamese often needs a few more syllables to carry the same meaning; prefer a natural, punchy line over an exact count).
 3) Rhyme: detect the scheme (end, internal, multisyllabic) and rebuild it with Vietnamese vần (vowel + final consonant, similar tone family). Use slant rhyme rather than dropping rhyme. Never sacrifice the end-rhyme of a punchline.
 4) Repeated words/stutter flows: repeat the same Vietnamese word with the same cadence.
-5) Register: street Vietnamese (tao/mày, tụi nó, thằng, xóm, địa bàn). Never stiff/textbook (avoid "kẻ địch", "quý vị", "hoàn toàn").
+5) Register: direct, colloquial Vietnamese with source-supported street vocabulary (xóm, địa bàn). Follow the separate pronoun/relationship selection; street diction never overrides it. Avoid stiff/textbook phrasing.
 6) Slang: use the dictionary as a menu. If a term is not listed, infer from context into equivalent street Vietnamese. If a term has a double meaning, pick the one the surrounding lines support. Never merge different terms into one generic word (opp != snitch).
 7) Match intensity 1:1: keep aggression aggressive, humor funny, sadness heavy. Do not sanitize, and do not add profanity the original lacks. Recreate wordplay with a Vietnamese pun when possible, else keep the main meaning.
 8) Never add notes, explanations, or extra lines.`;
@@ -103,6 +103,43 @@ memory / legacy: hồi ức (recollection), hoài niệm (nostalgic remembrance)
 spiritual struggle: cứu rỗi (spiritual salvation), chuộc lỗi (making amends), sám hối (penitence), thức tỉnh (awakening). Redemption is not always religious; choose chuộc lỗi or an ordinary equivalent when appropriate.
 fragility / isolation: hữu hạn (finite), phù du (fleeting), vô thường (impermanence with a philosophical register), cô quạnh (desolate solitude), trống vắng (felt absence), khắc khoải (aching restlessness).
 Blend selective Hán-Việt with clear everyday Vietnamese. A plain line may need none. Do not stack elevated nouns, add spiritual doctrine, or force mourning vocabulary into a joyful song. The chosen style controls how elevated or colloquial the wording may be.`;
+
+// Meanings and source links: docs/SLANG_RESEARCH_20261014.md.
+const SLANG_CONTEXT_RULES = `SLANG, ABBREVIATIONS & DOUBLE MEANINGS — EVERY GENRE:
+Decode slang, contractions and acronyms in the complete sentence and adjacent lines before choosing wording. They can occur in pop, R&B, indie, emo rap or storytelling as well as street rap. Distinguish praise, sarcasm, flirting, confession, insult and literal description. Genre never decides a word's meaning on its own.
+Recognize GOAT/G.O.A.T. as greatest of all time when used as praise, not automatically an animal. In casual praise use a natural equivalent for being the best; reserve a formal all-time title for a genuine ranking claim. Preserve an animal reading or pun if the context supports it. Decode NGL, IYKYK, IRL, DM, FOMO and YOLO by meaning; do not expand their English definitions in subtitles. An acronym may also be a name or technical abbreviation, so verify its local function rather than guessing from capitals alone.
+Treat gon'/gonna as going to, finna as fixing to/about to, wanna as want to, and 'cause/cuz as because when functioning as contractions. These spellings do not independently demand vulgar or aggressive language. Preserve intent, tense, aspect and certainty: might/may remain possible, not certain; ain't requires contextual negation; habitual be must not be reduced to a one-time action.
+Read connected images together. Choke/swallow can describe physical actions, failure under pressure or sexual innuendo depending on the passage. Retain an original concrete action when it carries a double meaning; do not replace it with an explanatory sexual act or insert death, anatomy or violence absent from the source. Carat in gemstone imagery is a weight unit, not a generic tiny amount: preserve the unit rather than inventing a local measurement. Do not mistake carat for carrot.
+Render the conversational function in natural target-language phrasing: a confession sounds candid, praise sounds appreciative, a dismissal sounds clipped, and despair remains vulnerable. Rebuild idioms as phrases rather than swapping isolated words. Preserve the selected style and separate pronoun settings; this guidance never selects forms of address.
+Preserve source-supported connectors and emphasis, but do not add a causal 'because', a contrastive 'but', certainty or extra exclamations merely to improve flow. Retain adlibs and deliberate repetition. Do not insert fashionable slang, acronyms or texting misspellings into plain lines. In Literal/Study mode, use contextual meanings to understand the phrase while retaining that mode's requested educational/literal treatment. Unknown slang: use supported context, retain meaningful ambiguity, never invent an acronym expansion. Output only the required translation.`;
+
+const GENERAL_SLANG_LEXICON_VI = `GENERAL SLANG & ABBREVIATIONS — VIETNAMESE PHRASE OPTIONS FOR ALL GENRES:
+These are contextual choices, not forced substitutions. Use the selected style's register and existing pronoun settings. Decode source abbreviations; do not fill Vietnamese subtitles with unexplained English acronyms or newly invented texting forms.
+[Praise, confidence and attraction]
+GOAT / G.O.A.T. = greatest of all time: "đỉnh nhất" / "số một" / "không ai bằng" for casual superlative praise; "vĩ đại nhất mọi thời đại" for explicit historical ranking. "Huyền thoại" fits established legendary status, not every flirtatious compliment. goat can still mean "dê" literally; capitals alone do not settle a pun.
+slay = "làm quá đỉnh" / "tỏa sáng" for outstanding performance or style; "hạ sát" when literally killing. Other senses require context; praise never becomes violence by default.
+rizz / game (romantic skill) = "duyên tán tỉnh" / "tài thả thính" / "sức hút"; game may instead be "trò chơi" or a scheme.
+stan = "fan cuồng" / "mê hết mình" for intense fandom; preserve Stan as a character's name when applicable. Do not equate fandom with stalking without evidence.
+[Sincerity, understatement and timing]
+cap / no cap = "xạo" / "chém gió" versus "không xạo" / "nói thật". A cap can also be a hat or limit; context decides.
+low-key / lowkey = "kín đáo" / "âm thầm" for discretion; "hơi" / "cũng khá" for understatement. Do not impose secrecy on every admission.
+high-key / highkey = "thật sự" / "rất" / "rõ là" for emphatic sincerity or intensity, not a compulsory opposite-of-secret phrase.
+finna = "sắp" / "định" / "chuẩn bị" for an impending intention; gon'/gonna = "sẽ" / "sắp" according to the sentence, never certainty added to might.
+NGL = not gonna lie: "nói thật" / "thật lòng mà nói", not a formal pledge against lying.
+IYKYK = if you know, you know: "hiểu thì hiểu" / "ai biết thì biết"; preserve the inside-reference quality without explaining the joke.
+[Digital life and social mood]
+receipts = "bằng chứng" / "chứng cứ" when substantiating what was said or done; "hóa đơn" / "biên lai" for actual purchases. Evidence does not establish a hostile relationship by itself.
+IRL = in real life: "ngoài đời" / "đời thực" in contrast to online or fictional life; distinguish unrelated proper names.
+DM / DMs = direct/private message: "nhắn riêng" / "tin nhắn riêng" in a social-media context. A musical key, unit or other abbreviation can have a different meaning.
+FOMO = fear of missing out: "sợ bỏ lỡ" / "sợ bị đứng ngoài cuộc vui", chosen for the actual event or opportunity.
+YOLO = you only live once: "chỉ sống một lần" / "đời chỉ có một lần"; preserve whether it is encouragement, recklessness or an ironic excuse.
+[Concrete images and suggestive language]
+carat = "carat" in gemstone-weight imagery; keep numerical quantities and the unit. Do not render it as "ly" or silently convert it to a different jewelry measure.
+choke = "sặc" / "nghẹn" for physical choking; "khớp" / "mất bình tĩnh" for failure under pressure when supported. Do not add "chết" unless death is stated or clearly entailed.
+swallow = "nuốt" / "nuốt trọn" for physical swallowing, including source-supported innuendo; "nuốt giận" / "chấp nhận" only for that figurative meaning. Preserve the action rather than explaining away the joke.
+[Vietnamese cadence]
+In emotionally conflicted conversation, "keep saying so and so" can be "cứ nói thế này thế kia"; do not automatically add the contempt of "luyên thuyên". "Stuck in a loop" can be "cứ mắc kẹt trong vòng luẩn quẩn" when describing a repeating predicament. Keep deliberate ambiguity in images such as "two heavens" rather than inventing two lovers or a theological explanation.
+Prefer readable spoken phrases such as "đỉnh nhất", "không xạo", "hết cửa", "bươn chải", "nhắn riêng" when their meanings fit. Use compact clauses and strong verbs; avoid literal calques and unnecessary administrative wording. Keep diacritics and legibility. A colloquial equivalent is not permission to change facts, address, certainty, imagery or the chosen style.`;
 const TRANSLATION_STYLES = {
     "smart_adaptive": { name: "Smart Adaptive (Recommended)", description: "AI auto-detects genre & delivers faithful lyrical translation." },
     "poetic_standard": { name: "Poetic & Romantic", description: "Best for Ballads and Pop." },
@@ -209,7 +246,7 @@ Prioritize Semantic & Imagery Fidelity together with Natural Poetic Cadence. The
    - Avoid mechanical repetition of pronouns on every line, but ALWAYS maintain grammatical clarity on who is feeling or acting.
 
 4) CJK & J-Pop Narrative, Grammar & Enjambment:
-   - Identify character dynamics and persona (Boku/Kimi -> Tớ-Cậu / Anh-Em; Watashi/Anata -> Em-Anh / Tớ-Cậu (hoặc Mình-Cậu); Ore/Omae -> Anh-Em / Tao-Mày). Maintain locked persona throughout.
+   - Identify character dynamics from the full narrative, not a mechanical mapping of Japanese address words. Follow the separate pronoun/relationship selection and preserve each established narrative voice.
    - Japanese/Korean modify nouns before the noun (連体修飾) and often spread one sentence across multiple lines (enjambment). Ingest the full multi-line sentence before translating so each line feels natural and connected, not broken or nonsensical.
    - Accurately decode cultural subtext and imagery (seasonal motifs, fleeting youth, unexpressed feelings) rather than literal dictionary glosses.
 
@@ -411,26 +448,26 @@ function buildPronounSection(pronounKey, styleObj, artist = "", title = "") {
         return `
 PRONOUN & RELATIONSHIP SELECTION (LYRICS-FIRST & NARRATIVE-DRIVEN):
 ${trackContext ? `${trackContext}\n` : ''}
-CORE PRINCIPLE: In Vietnamese music, pronouns define the emotional soul and authenticity of the song. Understand the ENTIRE song lyrics, story, and relationship dynamic first to select the natural persona:
+CORE PRINCIPLE: Choose forms of address from the ENTIRE lyrics and the relationship between the narrative speaker and addressee. Relationship evidence takes priority over genre labels, slang, profanity and selected vocabulary style. These Auto relationship rules take precedence over conflicting style suggestions about address; an explicit user-selected pronoun pair remains highest priority.
 
 1) ROMANCE & LOVE SONGS (Love, longing, heartbreak, romantic confession, couples):
-- In Vietnamese songs, romance MUST use natural couple pronouns: "Anh - Em" or "Em - Anh" (or "Tớ - Cậu" for youth/school romance), unless the selected style's override specifies another pair.
+- For intimate romantic address, use "Anh - Em" or "Em - Anh" (or "Tớ - Cậu" for clear youth/school romance). Consider converging evidence such as longing, attachment, jealousy, relationship conflict and affectionate address. A lone baby/babe is not enough to prove romance, but a sustained intimate relationship outweighs street slang or a Rap label.
+- A couple arguing, accusing, breaking up or using profanity can still use intimate couple pronouns. Do not turn emotional hurt into "Tao - Mày" merely because the lyrics mention receipts, swag, slick, explicit words or blame. R&B and emo rap can express anger while retaining intimate address.
 - Vocal Perspective:
-  * Female singer addressing a partner -> "Em - Anh" (First-person: "Em", Second-person: "Anh").
-    (Note: In Japanese lyrics, female singers often use "僕" (boku) poetically; translate as "Em - Anh", not "Anh").
-  * Male singer addressing a partner -> "Anh - Em" (First-person: "Anh", Second-person: "Em").
-  * If the artist gender is unknown or ambiguous -> Default to standard Vietnamese lyrical convention: "Anh - Em".
+  * Use the narrative speaker's established perspective rather than assuming every voice is the artist. For a supported female-to-male romantic perspective, use "Em - Anh"; for a supported male-to-female perspective, use "Anh - Em".
+  * Do not infer gender, age or partner identity from an artist name, a single Japanese address word or a genre stereotype. Artist context may support, but never override, the lyric's narrative evidence.
+  * If the romantic perspective remains ambiguous, default to "Anh - Em" as a Vietnamese lyrical convention, not a factual claim about the artist or partner.
 - ABSOLUTE BAN ON "TÔI YÊU BẠN": In any love song or romantic line, NEVER translate "I love you" / "君が好き" / "사랑해" as "Tôi yêu bạn" or "Tôi nhớ bạn". This sounds robotic and completely unmusical in Vietnamese songs.
 
 2) OTHER GENRES & RELATIONSHIPS:
 - Youth / School / Camaraderie / Anime: Use "Tớ - Cậu" or "Mình - Cậu".
 - Introspective Monologue (Solitary reflection, existential despair, no partner addressed): Use "Ta" or "Tôi" (keep subjects implicit where natural).
-- Street / Rap / Hip-Hop / Diss: Use "Tao - Mày".
-- True Duets (Clear alternating male and female singing lines): Male parts use "Anh - Em", female parts use "Em - Anh".
+- Explicitly hostile rival address or a clearly established coarse peer relationship: "Tao - Mày" is appropriate only when supported by the relationship and attitude. Rap/Hip-Hop, AAVE, swearing or diss-like wording alone never selects this pair. Distinguish a rival confrontation from an intimate partner's complaint.
+- True duets or multiple narrative voices: track the actual speakers and relationships; do not invent speaker changes from a new verse or a vocal-style change alone.
 
 3) SINGLE PERSONA LOCK (MANDATORY):
-- Choose EXACTLY ONE pronoun pair for the entire track and LOCK IT consistently from the first line to the last line.
-- NEVER mix, swap, or alternate personas across different verses, choruses, or lines.
+- For a single speaker addressing the same person, lock ONE pair consistently. A change in emotion, genre, slang or chorus does not change the relationship.
+- Change viewpoint only where the supplied lyrics clearly establish another speaker or addressee. Keep each voice's relationships consistent; never merge distinct characters or introduce an unsupported switch.
 
 4) RESPECT SCENERY & NO-PRONOUN LINES:
 - Do NOT force pronouns into lines that have none (pure imagery, weather, scenery like "bầu trời xanh", "đêm mưa rơi"). Maintain natural Subject-Verb-Object clarity on action lines.
@@ -1227,14 +1264,16 @@ function buildTranslationSystemPrompt(lineCount, styleKey, pronounKey, mode, eff
 
     const parts = [
         metaBlock,
-        pronounSection ? pronounSection.trimEnd() : "",
         styleObj.role,
         styleObj.style,
         outputBlock,
         langModule.buildGuardrails ? langModule.buildGuardrails() : buildTranslationGuardrails(),
         langModule.buildFlowPunctuation ? langModule.buildFlowPunctuation() : buildTranslationFlowPunctuation(),
         styleObj.override || "",         
+        pronounSection ? pronounSection.trimEnd() : "",
         NARRATIVE_FIDELITY_RULES,
+        SLANG_CONTEXT_RULES,
+        langModule.code === "vi" ? GENERAL_SLANG_LEXICON_VI : "",
         langModule.code === "vi" && styleKey !== "literal_study" ? CONTEXTUAL_LEXICON_VI : "",
         buildTaskThinkingRules(thinkingLabel, effort, langModule.name || "Vietnamese")
     ];

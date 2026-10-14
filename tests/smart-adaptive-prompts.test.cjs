@@ -41,6 +41,16 @@ for (const language of ['vi', 'en', 'ja', 'ko', 'zh', 'uk']) {
             assert.ok(prompt.includes('Distinguish the artist from a character'));
             assert.ok(prompt.includes('retain the ambiguity'));
             assert.ok(prompt.includes('take precedence over any style instruction permitting loss of detail'));
+            assert.ok(prompt.includes('SLANG, ABBREVIATIONS & DOUBLE MEANINGS — EVERY GENRE'));
+            assert.equal(prompt.includes('GENERAL SLANG & ABBREVIATIONS — VIETNAMESE'), language === 'vi');
+            if (language === 'vi') {
+                assert.ok(prompt.includes('GOAT / G.O.A.T. = greatest of all time'));
+                assert.ok(prompt.includes('Do not render it as "ly"'));
+                assert.ok(prompt.includes('Do not add "chết" unless death is stated'));
+                for (const acronym of ['NGL', 'IYKYK', 'IRL', 'DM / DMs', 'FOMO', 'YOLO']) {
+                    assert.ok(prompt.includes(acronym), `Missing abbreviation: ${acronym}`);
+                }
+            }
             assert.equal(prompt.includes('CONTEXTUAL VIETNAMESE WORD BANK'), language === 'vi' && style !== 'literal_study');
             assert.ok(prompt.indexOf('NARRATIVE & CULTURAL READING') > prompt.indexOf('PRONOUN LOCK'));
         }
@@ -50,3 +60,26 @@ const offPrompt = vm.runInContext("buildTranslationSystemPrompt(3, 'smart_adapti
 assert.ok(offPrompt.includes('Use the supplied full-song context'));
 assert.ok(!offPrompt.includes('Skip deliberation entirely'));
 console.log('PASS: narrative rules across 11 styles, 6 languages and both formats; Vietnamese lexicon scope and effort-off context.');
+
+for (const mode of ['tags', 'json']) {
+    for (const style of ['smart_adaptive', 'street_bold', 'street_cool', 'poetic_standard']) {
+        const prompt = vm.runInContext(
+            `buildTranslationSystemPrompt(3, '${style}', 'default', '${mode}', 'low', 'vi', 'Maz B', 'Receipts')`, context);
+        assert.ok(prompt.includes('Relationship evidence takes priority over genre labels'));
+        assert.ok(prompt.includes('A couple arguing, accusing, breaking up or using profanity'));
+        assert.ok(prompt.includes('default to "Anh - Em" as a Vietnamese lyrical convention'));
+        assert.ok(!prompt.includes('Street / Rap / Hip-Hop / Diss: Use "Tao - Mày"'));
+        assert.ok(prompt.includes('Rap/Hip-Hop, AAVE, swearing or diss-like wording alone never selects this pair'));
+        const styleOverride = vm.runInContext(`STYLE_INSTRUCTIONS['${style}'].override || ''`, context);
+        if (styleOverride) assert.ok(prompt.indexOf('PRONOUN & RELATIONSHIP SELECTION') > prompt.indexOf(styleOverride));
+    }
+    for (const key of ['anh_em', 'em_anh', 'toi_ban', 'tao_may']) {
+        const prompt = vm.runInContext(
+            `buildTranslationSystemPrompt(3, 'smart_adaptive', '${key}', '${mode}', 'low', 'vi')`, context);
+        const [first, second] = vm.runInContext(`PRONOUN_MODES['${key}'].value.split(' - ')`, context);
+        assert.ok(prompt.includes(`First person (I/me/my/tôi) → "${first}"`));
+        assert.ok(prompt.includes(`Second person (you/your/bạn) → "${second}"`));
+        assert.ok(!prompt.includes('PRONOUN & RELATIONSHIP SELECTION'));
+    }
+}
+console.log('PASS: Auto relationship priority, Receipts context and 4 explicit pronoun locks in tags/JSON.');
