@@ -1,0 +1,1421 @@
+// GeminiClient.js - Network & API Handling
+
+class RequestQueue {
+    constructor() {
+        this.queue = [];
+        this.isProcessing = false;
+        this.pendingPromises = new Map(); // For deduplication
+        this.lastRateLimited = false;
+        this.baseDelay = 100; // Adaptive delay
+    }
+
+    add(requestFn, priority = false, key = null) {
+        // Deduplication: If same key is already pending, return existing promise
+        if (key && this.pendingPromises.has(key)) {
+            console.log(`[Queue] Deduped request: ${key}`);
+            return this.pendingPromises.get(key);
+        }
+
+        const promise = new Promise((resolve, reject) => {
+            const item = { requestFn, resolve, reject, key };
+            priority ? this.queue.unshift(item) : this.queue.push(item);
+            this.process();
+        });
+
+        // Track pending promise for deduplication
+        if (key) {
+            this.pendingPromises.set(key, promise);
+            promise.finally(() => this.pendingPromises.delete(key)).catch(() => {});
+        }
+
+        return promise;
+    }
+
+    promote(key) {
+        if (!key) return;
+        const index = this.queue.findIndex(item => item.key === key);
+        if (index > 0) {
+            const [item] = this.queue.splice(index, 1);
+            this.queue.unshift(item);
+            console.log(`[Queue] Promoted task: ${key}`);
+        }
+    }
+
+    // Cancel all pending requests (call when track changes)
+    cancelAll(reason = 'Track changed') {
+        const cancelled = this.queue.length;
+        this.queue.forEach(item => {
+            item.reject(new Error(reason));
+            if (item.key) this.pendingPromises.delete(item.key);
+        });
+        this.queue = [];
+        if (cancelled > 0) console.log(`[Queue] Cancelled ${cancelled} pending requests`);
+        return cancelled;
+    }
+
+    // Remove specific key from queue
+    cancel(key) {
+        if (!key) return false;
+        const index = this.queue.findIndex(item => item.key === key);
+        if (index !== -1) {
+            const [item] = this.queue.splice(index, 1);
+            item.reject(new Error('Cancelled'));
+            this.pendingPromises.delete(key);
+            return true;
+        }
+        return false;
+    }
+
+    async process() {
+        if (this.isProcessing) return;
+        if (this.queue.length === 0) return;
+
+        this.isProcessing = true;
+        const { requestFn, resolve, reject, key } = this.queue.shift();
+
+        try {
+            const result = await requestFn();
+            this.lastRateLimited = false;
+            resolve(result);
+        } catch (e) {
+            // Track rate limiting for adaptive delay
+            if (e.status === 429) this.lastRateLimited = true;
+            reject(e);
+        } finally {
+            // Adaptive delay: longer if rate limited, shorter otherwise
+            const delay = this.lastRateLimited ? 500 : this.baseDelay;
+            await new Promise(r => setTimeout(r, delay));
+            this.isProcessing = false;
+            this.process();
+        }
+    }
+
+    // Get queue status
+    get status() {
+        return {
+            pending: this.queue.length,
+            isProcessing: this.isProcessing,
+            rateLimited: this.lastRateLimited
+        };
+    }
+}
+
+// Global queue instances
+const geminiQueueTranslation = new RequestQueue();
+const geminiQueuePhonetic = new RequestQueue();
+
+const GeminiClient = {
+    // Notification throttling to prevent spam
+    lastNotificationTime: 0,
+    lastNotificationMessage: '',
+    
+    shouldShowNotification(message) {
+        const now = Date.now();
+        const throttleWindow = 10000; // 10 seconds
+        
+        // If same message within throttle window, suppress
+        if (this.lastNotificationMessage === message && 
+            (now - this.lastNotificationTime) < throttleWindow) {
+            console.log(`[Lyrics+] Suppressed duplicate notification: ${message.substring(0, 50)}...`);
+            return false;
+        }
+        
+        this.lastNotificationTime = now;
+        this.lastNotificationMessage = message;
+        return true;
+    },
+
+    repairTruncatedJson(text) {
+        let raw = String(text || "").trim();
+        if (!raw) return "";
+
+        // Remove markdown code fences if present
+        raw = raw.replace(/```[a-z]*\n?/gim, "").replace(/```/g, "").trim();
+
+        // 1. Balance quotation marks (quotes inside strings)
+        let inString = false;
+        let escape = false;
+        for (let i = 0; i < raw.length; i++) {
+            const char = raw[i];
+            if (escape) {
+                escape = false;
+            } else if (char === '\\') {
+                escape = true;
+            } else if (char === '"') {
+                inString = !inString;
+            }
+        }
+
+        if (inString) {
+            if (raw.endsWith('\\')) {
+                raw = raw.slice(0, -1);
+            }
+            raw += '"';
+        }
+
+        // 2. Clean up trailing commas, colons, or incomplete array/object elements
+        raw = raw.replace(/,\s*$/, "");
+        raw = raw.replace(/:\s*$/, "");
+
+        // 3. Balance braces and brackets
+        let stack = [];
+        inString = false;
+        escape = false;
+        for (let i = 0; i < raw.length; i++) {
+            const char = raw[i];
+            if (escape) {
+                escape = false;
+            } else if (char === '\\') {
+                escape = true;
+            } else if (char === '"') {
+                inString = !inString;
+            } else if (!inString) {
+                if (char === '{' || char === '[') {
+                    stack.push(char);
+                } else if (char === '}') {
+                    if (stack[stack.length - 1] === '{') {
+                        stack.pop();
+                    }
+                } else if (char === ']') {
+                    if (stack[stack.length - 1] === '[') {
+                        stack.pop();
+                    }
+                }
+            }
+        }
+
+        while (stack.length > 0) {
+            const openChar = stack.pop();
+            if (openChar === '{') {
+                raw += '}';
+            } else if (openChar === '[') {
+                raw += ']';
+            }
+        }
+
+        return raw;
+    },
+    
+    // Cancel all pending requests in both queues (call when track changes)
+    cancelAllQueues() {
+        const cancelled = geminiQueueTranslation.cancelAll() + geminiQueuePhonetic.cancelAll();
+        return cancelled;
+    },
+
+    async fetchWithRetry(fn, retries = 3, baseDelay = 1000, attempt = 1) {
+        try {
+            return await fn();
+        } catch (error) {
+            if (retries === 0) throw error;
+            // Aborts (timeout, user cancel, stream teardown) are not transient — retrying
+            // re-runs the whole model call and looks like "reasoning starts from scratch".
+            if (error.name === "AbortError" || error.code === 20) throw error;
+            // Don't retry on client errors (4xx), except 429 (Too Many Requests)
+            if (error.status >= 400 && error.status < 500 && error.status !== 429) throw error;
+            // Parse / empty-body failures won't succeed on identical retry — avoid loops.
+            const msg = String(error.message || "");
+            if (/Empty response|No response from API/i.test(msg)) throw error;
+            // Hard quota exceeded (429 with quota message) won't succeed on same key retry — throw immediately to let key rotation handle it.
+            if (error.status === 429 && /quota/i.test(msg)) throw error;
+            // High demand (503) or stalled connect/idle won't succeed on same key retry — throw immediately to rotate keys
+            if (error.status === 503 || error.idleAbort || error.isStalledConnect) throw error;
+
+            // True exponential backoff: delay = baseDelay * 2^attempt
+            const delay = baseDelay * Math.pow(2, attempt - 1);
+            if (error.status === 429) {
+                console.warn(`[Lyrics+] Rate Limited (429). Retrying in ${delay / 1000}s... (${retries} retries left)`);
+            } else {
+                console.warn(`[Retry] Attempt ${attempt}: retrying in ${delay}ms... (${retries} left)`, error.message);
+            }
+
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return this.fetchWithRetry(fn, retries - 1, baseDelay, attempt + 1);
+        }
+    },
+
+    promote(key) {
+        if (key.includes(':gemini_romaji')) geminiQueuePhonetic.promote(key);
+        else geminiQueueTranslation.promote(key);
+    },
+
+    /**
+     * Real-time view of reasoning from a partial buffer (used during streaming).
+     * Returns the union of: (a) all closed <thought>/<think> blocks, and (b) the body of the
+     * last unclosed block (so the user sees tokens as they arrive).
+     */
+    extractStreamingReasoning(buffer) {
+        const s = String(buffer || "");
+        const parts = [];
+        const tagRe = /<(?:thought|think|redacted_thinking|reasoning)(?:\s+[^>]*)?>([\s\S]*?)(?:<\/(?:thought|think|redacted_thinking|reasoning)>|(?=[<＜【［][0-9０-９]+[>＞】］]|(?:\n|^|```[a-z]*\s*)\s*\{|(?:\n|^|```[a-z]*\s*)\s*\[\s*["\d]|(?:\n|^)\s*"(?:translations|phonetics)"\s*:|$))/gi;
+        let m;
+        while ((m = tagRe.exec(s)) !== null) {
+            const inner = m[1];
+            if (inner && inner.trim()) parts.push(inner.trim());
+        }
+        // Also support Gemma 4 control tokens: <|channel>thought ... <channel|>
+        const gemmaRe = /<\|channel>thought\n?([\s\S]*?)(?:<channel\|>|(?=[<＜【［][0-9０-９]+[>＞】］]|(?:\n|^|```[a-z]*\s*)\s*\{|(?:\n|^|```[a-z]*\s*)\s*\[\s*["\d]|(?:\n|^)\s*"(?:translations|phonetics)"\s*:|$))/gi;
+        while ((m = gemmaRe.exec(s)) !== null) {
+            const inner = m[1];
+            if (inner && inner.trim()) parts.push(inner.trim());
+        }
+        return parts.join("\n\n").trim();
+    },
+
+    /**
+     * Strip <thought>, <think>, etc. from model output; collect inner text for optional UI.
+     * Robustly handles closed and unclosed/orphaned thought blocks.
+     */
+    stripReasoningBlocks(raw) {
+        let s = String(raw || "");
+        const collected = [];
+
+        // 1. Match and strip standard closed reasoning blocks
+        const closedPatterns = [
+            /<thought(?:\s+[^>]*)?>([\s\S]*?)<\/thought>/gi,
+            new RegExp("<" + "think(?:\\s+[^>]*)?>([\\s\\S]*?)<" + "/" + "think>", "gi"),
+            new RegExp("<" + "redacted_thinking(?:\\s+[^>]*)?>([\\s\\S]*?)<" + "/" + "redacted_thinking>", "gi"),
+            /<reasoning(?:\s+[^>]*)?>([\s\S]*?)<\/reasoning>/gi,
+            /<\|channel>thought\n?([\s\S]*?)<channel\|>/gi
+        ];
+
+        let prev = null;
+        while (prev !== s) {
+            prev = s;
+            for (const re of closedPatterns) {
+                s = s.replace(re, (_, inner) => {
+                    if (inner && String(inner).trim()) collected.push(String(inner).trim());
+                    return "";
+                });
+            }
+            s = s.trim();
+        }
+
+        // 2. Match and strip unclosed / truncated reasoning blocks (e.g. <thought> without </thought> before tags/JSON or EOF)
+        const unclosedPatterns = [
+            /<(?:thought|think|redacted_thinking|reasoning)(?:\s+[^>]*)?>([\s\S]*?)(?=(?:[<＜【［][0-9０-９]+[>＞】］]|(?:\n|^|```[a-z]*\s*)\s*\{|(?:\n|^|```[a-z]*\s*)\s*\[\s*["\d]|(?:\n|^)\s*"(?:translations|phonetics)"\s*:|$))/gi,
+            /<\|channel>thought\n?([\s\S]*?)(?=(?:<channel\|>|[<＜【［][0-9０-９]+[>＞】］]|(?:\n|^|```[a-z]*\s*)\s*\{|(?:\n|^|```[a-z]*\s*)\s*\[\s*["\d]|(?:\n|^)\s*"(?:translations|phonetics)"\s*:|$))/gi
+        ];
+
+        for (const re of unclosedPatterns) {
+            s = s.replace(re, (_, inner) => {
+                if (inner && String(inner).trim()) collected.push(String(inner).trim());
+                return "";
+            });
+        }
+
+        // 3. Clean up any stray/orphaned closing tags
+        s = s.replace(/<\/\s*(?:thought|think|redacted_thinking|reasoning)\s*>|<channel\|>/gi, "").trim();
+
+        return { cleaned: s, reasoningContent: collected.join("\n\n") };
+    },
+
+    extractGeminiJson(text) {
+        let raw = String(text || "").trim();
+        raw = raw.replace(/```[a-z]*\n?/gim, "").replace(/```/g, "").trim();
+
+        // Priority 0: Parse compact tag format (e.g., <1>content</1>, ＜1＞content＜/1＞, 【1】content【/1】, ＜１＞content＜／１＞)
+        // Using a robust scan-based parser supporting half-width and full-width bracket tags and digits
+        const tagRegex = /[<＜【［]([0-9０-９]+)[>＞】］]/g;
+        let match;
+        const tags = [];
+        while ((match = tagRegex.exec(raw)) !== null) {
+            const normalizedNumStr = match[1].replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 65248));
+            tags.push({
+                number: parseInt(normalizedNumStr, 10),
+                rawNumber: match[1],
+                index: match.index,
+                length: match[0].length
+            });
+        }
+
+        if (tags.length > 0) {
+            const result = [];
+            for (let i = 0; i < tags.length; i++) {
+                const currentTag = tags[i];
+                const startPos = currentTag.index + currentTag.length;
+                const endPos = (i + 1 < tags.length) ? tags[i + 1].index : raw.length;
+                
+                let content = raw.substring(startPos, endPos);
+                
+                // Look for standard or full-width closing tag </number>, ＜/number＞, 【/number】, ＜／１＞, etc.
+                const fullWidthNum = String(currentTag.number).replace(/[0-9]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 65248));
+                const closingTagRe = new RegExp(`[<＜【［][\\/／](?:${currentTag.number}|${fullWidthNum})[>＞】］]?`, 'i');
+                const closeMatch = content.match(closingTagRe);
+                if (closeMatch && closeMatch.index !== undefined) {
+                    content = content.substring(0, closeMatch.index);
+                }
+                
+                // Cleanup helper regexes for any remaining garbage at the end
+                // 1. If model used opening tag as closing tag: <number>, ＜number＞, 【number】, ［number］, ＜１＞
+                const openingReg = new RegExp(`[<＜【［](?:${currentTag.number}|${fullWidthNum})[>＞】］]\\s*$`, 'i');
+                content = content.replace(openingReg, '');
+                
+                // 2. Generic malformed closing tag like </, ＜／, 【/, ［/ with optional digits (half or full-width)
+                content = content.replace(/[<＜【［][\/／][0-9０-９]*[>＞】］]?[ \t]*$/, '');
+                
+                const trimmed = content.trim();
+                const targetIdx = currentTag.number - 1;
+                if (targetIdx >= 0 && (result[targetIdx] === undefined || trimmed !== '')) {
+                    result[targetIdx] = trimmed;
+                }
+            }
+
+            // Fill any gaps with empty strings
+            for (let i = 0; i < result.length; i++) {
+                if (result[i] === undefined) result[i] = '';
+            }
+
+            if (result.length > 0) {
+                console.log(`[Lyrics+] Parsed ${result.length} lines via Robust Compact Tags`);
+                return { translation: result, vi: result, phonetic: result.join('\n') };
+            }
+        }
+
+        // Priority 1: Parse numbered list format (e.g., "1. line1\n2. line2", "１. line1\n２. line2")
+        const hasNumberedLines = /^[0-9０-９]+\.\s*/m.test(raw);
+        if (hasNumberedLines) {
+            const result = [];
+            const lines = raw.split('\n');
+            
+            for (const line of lines) {
+                const match = line.match(/^([0-9０-９]+)\.\s*(.*)/s);
+                if (match) {
+                    const normalizedNumStr = match[1].replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 65248));
+                    const idx = parseInt(normalizedNumStr, 10) - 1;
+                    // Handle empty lines (e.g., "5. " or "5.")
+                    if (idx >= 0) {
+                        result[idx] = match[2].trim();
+                    }
+                }
+            }
+            
+            // Fill any gaps with empty strings
+            for (let i = 0; i < result.length; i++) {
+                if (result[i] === undefined) result[i] = '';
+            }
+            
+            if (result.length > 0) {
+                console.log(`[Lyrics+] Parsed ${result.length} lines via Numbered List`);
+                return { translation: result, vi: result, phonetic: result.join('\n') };
+            }
+        }
+
+        // Priority 2: Try JSON (array OR object with array-valued field).
+        // Models sometimes return {"translations": [...]}, {"phonetics": [...]}, {"lines": [...]}
+        // even when prompted for tags — handle that without leaking JSON syntax to the user.
+        function safeParse(s) { try { return JSON.parse(s); } catch { return null; } }
+        function extractArray(obj) {
+            if (!obj || typeof obj !== "object") return null;
+            if (Array.isArray(obj)) return obj;
+            // Prefer well-known keys
+            const preferred = ["translations", "phonetics", "vi", "lines", "result", "results", "output"];
+            for (const k of preferred) {
+                if (Array.isArray(obj[k])) return obj[k];
+            }
+            // Fallback: any string-array value on the object
+            for (const k of Object.keys(obj)) {
+                const v = obj[k];
+                if (Array.isArray(v) && v.every(x => typeof x === "string")) return v;
+            }
+            return null;
+        }
+
+        let parsed = safeParse(raw);
+        let arr = extractArray(parsed);
+
+        const sliceJson = (text, openCh, closeCh) => {
+            const start = text.indexOf(openCh);
+            if (start === -1) return null;
+            let depth = 0, inStr = false, esc = false;
+            for (let i = start; i < text.length; i++) {
+                const c = text[i];
+                if (inStr) {
+                    if (esc) { esc = false; continue; }
+                    if (c === "\\") { esc = true; continue; }
+                    if (c === '"') inStr = false;
+                    continue;
+                }
+                if (c === '"') { inStr = true; continue; }
+                if (c === openCh) depth++;
+                else if (c === closeCh) { depth--; if (depth === 0) return text.slice(start, i + 1); }
+            }
+            return null;
+        };
+
+        // Bracket-balanced object/array slice (handles strings + escapes, ignores brackets inside quotes).
+        // Used when raw has prose around the JSON (e.g. "Here is the output: {...}").
+        if (!arr) {
+            // Try object first (more common from Gemini structured output), then array
+            const objSlice = sliceJson(raw, "{", "}");
+            if (objSlice) arr = extractArray(safeParse(objSlice));
+            if (!arr) {
+                const arrSlice = sliceJson(raw, "[", "]");
+                const slicedParsed = safeParse(arrSlice || "");
+                arr = extractArray(slicedParsed);
+            }
+        }
+
+        // FALLBACK: Self-healing JSON Repair for truncated content
+        if (!arr) {
+            const repaired = this.repairTruncatedJson(raw);
+            parsed = safeParse(repaired);
+            arr = extractArray(parsed);
+            if (!arr) {
+                const objSlice = sliceJson(repaired, "{", "}");
+                if (objSlice) arr = extractArray(safeParse(objSlice));
+                if (!arr) {
+                    const arrSlice = sliceJson(repaired, "[", "]");
+                    const slicedParsed = safeParse(arrSlice || "");
+                    arr = extractArray(slicedParsed);
+                }
+            }
+        }
+
+        if (Array.isArray(arr)) {
+            console.log(`[Lyrics+] Parsed ${arr.length} lines via JSON`);
+            const stringArr = arr.map(x => (x == null ? "" : String(x)));
+            return { translation: stringArr, vi: stringArr, phonetic: stringArr.join('\n') };
+        }
+
+        // Priority 2.5: Regex JSON Recovery (if JSON parsing failed but response contains JSON structures)
+        if (!arr && (raw.includes('[') || raw.includes('{'))) {
+            const stringPattern = /"((?:[^"\\]|\\.)*)"/g;
+            const matches = [...raw.matchAll(stringPattern)];
+            if (matches.length > 0) {
+                const stringArr = [];
+                for (const match of matches) {
+                    const str = match[1];
+                    // Check if this string is followed by a colon (i.e. is a key like "translations":)
+                    const postIndex = match.index + match[0].length;
+                    const postText = raw.slice(postIndex, postIndex + 10);
+                    const isKey = /^\s*:/.test(postText);
+                    if (!isKey) {
+                        try {
+                            stringArr.push(JSON.parse(`"${str}"`));
+                        } catch {
+                            // Manual unescape fallback
+                            stringArr.push(str.replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
+                        }
+                    }
+                }
+                if (stringArr.length > 0) {
+                    console.log(`[Lyrics+] Recovered ${stringArr.length} lines from malformed JSON via regex`);
+                    return { translation: stringArr, vi: stringArr, phonetic: stringArr.join('\n') };
+                }
+            }
+        }
+
+        // Priority 3: Fallback - split by newlines
+        DebugLogger.warn("Structured parse failed, using line split fallback...");
+        const reasoningLeakRe = /(?:<thought|<think|<\/thought|<\/think|<reasoning|<\/reasoning|<\|channel>thought|<channel\|>|initiating|refining|analysis|analyzing|vietnamese is the target|translation strategy|pronoun locking|thinking process|reasoning:)/i;
+        if (reasoningLeakRe.test(raw)) {
+            DebugLogger.warn("Leaked reasoning detected in fallback split, triggering retry/failover...");
+            throw new Error("Format validation failed: output contains leaked reasoning in fallback split");
+        }
+        const rawLines = raw.split('\n').filter(l => l.trim() && !reasoningLeakRe.test(l));
+        if (rawLines.length === 0) {
+            throw new Error("Format validation failed: empty output after removing invalid content");
+        }
+        return { translation: rawLines, vi: rawLines, phonetic: rawLines.join('\n'), isFallbackSplit: true };
+    },
+
+    /**
+     * Mutate `body` with reasoning-effort flags for the SPECIFIC API family detected from endpoint+model.
+     * Strict providers (Gemini OpenAI-compat) reject unknown fields, so we cannot broadcast — we must
+     * detect and send only the field that family accepts.
+     *
+     * `effort` values:
+     *   "off"    — disable reasoning entirely (fastest, cheapest)
+     *   "low"    — minimal reasoning (~512 tokens) — recommended default for lyrics
+     *   "medium" — moderate reasoning (~2048 tokens)
+     *   "high"   — full reasoning (~8192 tokens or dynamic)
+     *
+     * Silently no-op (no warn toast) when the model has no thinking mode in the first place
+     * (e.g. Gemma 1/2/3, GPT-4o, Claude Haiku, DeepSeek-chat) — the user's
+     * intent is already satisfied by the model's design.
+     *
+     * Warns only on genuine capability mismatch: user wants "off" on a model whose thinking
+     * cannot be disabled at runtime (e.g. Claude thinking models, DeepSeek-reasoner).
+     */
+    applyReasoningEffort(body, endpoint, model, effort) {
+        if (!body || typeof body !== "object") return body;
+        if (!effort || effort === "default") return body;
+        const url = String(endpoint || "").toLowerCase();
+        const m = String(model || "").toLowerCase();
+        let applied = true;
+
+        // Per-level Google thinking_budget (negative = dynamic). Tokens numbers are
+        // calibrated for ~50-line lyric tasks: low is enough for 1-2 line reconsideration,
+        // high lets the model do a full audit if it wants.
+        const geminiBudget = effort === "off" ? 0 : effort === "low" ? 512 : effort === "medium" ? 2048 : -1;
+        const openRouterBudget = effort === "off" ? 0 : effort === "low" ? 512 : effort === "medium" ? 2048 : 8192;
+
+        // ── Google Gemini (OpenAI-compat or Vertex) ──────────────────────────
+        if (url.includes("generativelanguage.googleapis.com") || url.includes("aiplatform.googleapis.com")) {
+            // Three classes on Google's endpoint:
+            //   1) Gemini 2.5+ / 3.x / thinking-exp — supports `thinking_config.thinking_budget`
+            //      via extra_body (Gemini-only native field).
+            //   2) Gemma 4 (26B MoE + 31B dense) — both think natively. Since ~May 2026,
+            //      JSON schema mode no longer implicitly suppresses thinking server-side.
+            //      Use top-level `reasoning_effort` (OpenAI compat) to control.
+            //   3) Gemma 1/2/3, older Gemini — no thinking at all.
+            const isGeminiWithBudget = /gemini-(2\.5|[3-9])|flash-thinking|thinking-exp/.test(m);
+            const isGemma4 = /gemma-4/.test(m);
+            if (isGeminiWithBudget) {
+                // Google's OpenAI-compatible endpoint:
+                // Only Gemini 3.7+ accepts top-level reasoning_effort: "none". Older/other models throw HTTP 400.
+                if (effort === "off") {
+                    if (/gemini-(?:3\.[7-9]|[4-9])/.test(m)) {
+                        body.reasoning_effort = "none";
+                    } else {
+                        delete body.reasoning_effort;
+                    }
+                } else {
+                    body.reasoning_effort = effort;
+                }
+            } else if (isGemma4) {
+                // Gemma 4 (26B + 31B) thinks natively via <|think|> chat template token.
+                // Google's hosted API does NOT accept reasoning_effort or thinking_config
+                // for Gemma models (HTTP 400: "Thinking budget is not supported").
+                // Thinking is controlled server-side by the chat template — we cannot
+                // disable it from the client. Previously JSON schema mode implicitly
+                // suppressed thinking; this changed ~May 2026.
+                // TODO: Monitor Google API updates for Gemma thinking control support.
+            }
+            // else: Gemma 1/2/3 — no thinking, silent no-op
+        }
+        // ── OpenRouter (routes to many providers — always honors reasoning field) ────
+        else if (url.includes("openrouter.ai")) {
+            if (effort === "off") {
+                body.reasoning = { ...(body.reasoning || {}), exclude: true, max_tokens: 0 };
+            } else {
+                body.reasoning = { ...(body.reasoning || {}), max_tokens: openRouterBudget };
+            }
+        }
+        // ── OpenAI ───────────────────────────────────────────────────────────
+        else if (url.includes("api.openai.com")) {
+            if (/^(o1|o3|o4|gpt-5)/.test(m)) {
+                body.reasoning_effort = effort === "off" ? "minimal" : effort;
+            }
+            // else: GPT-4o / GPT-4-turbo / GPT-3.5 — no reasoning stage at all, no-op
+        }
+        // ── DeepSeek (model-bound) ──────────────────────────────────────────
+        else if (url.includes("api.deepseek.com")) {
+            // deepseek-chat = no reasoning (no-op). deepseek-reasoner = always reasons,
+            // runtime cannot disable — warn only if user explicitly asked for "off".
+            if (m.includes("reasoner") && effort === "off") applied = false;
+        }
+        // ── Qwen DashScope (Qwen3 family accepts enable_thinking; older Qwen2 ignore) ──
+        else if (url.includes("dashscope.aliyuncs.com")) {
+            if (/qwen3|qwen-3|qwq/.test(m)) {
+                body.extra_body = {
+                    ...(body.extra_body || {}),
+                    enable_thinking: effort !== "off",
+                    ...(effort !== "off" && effort !== "high" ? { thinking_budget: openRouterBudget } : {}),
+                };
+            }
+            // else: Qwen2 / Qwen-Max non-thinking — no-op
+        }
+        // ── Anthropic native ────────────────────────────────────────────────
+        else if (url.includes("api.anthropic.com")) {
+            // Only Sonnet/Opus 4+ support adjustable reasoning. Haiku and Claude 3.x don't
+            // have reasoning at all → skip to avoid unknown-field rejection.
+            const supportsClaudeReasoning = /claude-(sonnet|opus)-(4|5|6)/.test(m) || /claude-.*-thinking/.test(m);
+            if (supportsClaudeReasoning) {
+                // Claude's scale: low | medium | max. No true "off" — warn when user asked for it.
+                body.effort = effort === "off" ? "low" : effort === "high" ? "max" : effort;
+                if (effort === "off") applied = false;
+            }
+            // else: Claude Haiku / Claude 3.x — no reasoning, no-op
+        }
+        // ── Local / Self-hosted runtimes (lenient — ignore unknown fields) ──
+        else {
+            const isOllama = url.includes(":11434") || url.includes("/api/chat") || url.includes("ollama");
+            if (isOllama) {
+                body.think = effort !== "off";
+            } else {
+                body.chat_template_kwargs = {
+                    ...(body.chat_template_kwargs || {}),
+                    enable_thinking: effort !== "off",
+                };
+            }
+        }
+
+        if (!applied) this.warnReasoningEffortUnsupported(endpoint, model, effort);
+        return body;
+    },
+
+    /** Show a one-shot toast when the requested reasoning effort can't be honored for (endpoint, model). */
+    warnReasoningEffortUnsupported(endpoint, model, effort) {
+        if (!this._thinkingWarnedKeys) this._thinkingWarnedKeys = new Set();
+        const key = `${endpoint}::${model}::${effort}`;
+        if (this._thinkingWarnedKeys.has(key)) return;
+        this._thinkingWarnedKeys.add(key);
+        try {
+            const msg = (typeof getText === "function" && getText("settings.reasoningEffort.unsupportedToast"))
+                || "This model's reasoning cannot be disabled at runtime.";
+            Spicetify?.showNotification?.(msg, true);
+        } catch (_) { /* notification optional */ }
+    },
+
+    /**
+     * Detect whether (endpoint, model) supports `response_format: { type: "json_object" }` AND
+     * the OpenAI `system` role. On Google's OpenAI-compat layer, Gemma 1/2/3 reject both
+     * with HTTP 400 "Developer instruction is not enabled". Gemma 4+ and Gemini handle them fine.
+     * Other endpoints (OpenAI/Anthropic/DeepSeek/OpenRouter) all support both.
+     */
+    modelSupportsJsonSchema(endpoint, model) {
+        const ep = (endpoint || "").toLowerCase();
+        const m = (model || "").toLowerCase();
+        const isGoogle = ep.includes("generativelanguage.googleapis.com");
+        if (!isGoogle) return true;
+        // Google API: Gemma 1/2/3 reject JSON schema + system role natively.
+        // Gemma 4 natively supports them, BUT its native <|think|> tokens clash with
+        // Google's JSON schema constraints. When thinking is disabled, the model
+        // generates an empty thought block <|channel>thought\n<channel|> before the output,
+        // which violates JSON schema and causes the generation to hang for 40s+ before timing out.
+        // Forcing Prompt Engineering mode bypasses the JSON constraint and restores fast speeds.
+        if (/^gemma-[1234](?:[^\d]|$)/.test(m)) return false;
+        return true;
+    },
+
+    /** Silent marker when JSON schema mode is auto-demoted to prompt mode. */
+    warnJsonSchemaUnsupported(endpoint, model) {
+        if (!this._jsonFallbackWarnedKeys) this._jsonFallbackWarnedKeys = new Set();
+        const key = `${endpoint}::${model}`;
+        if (this._jsonFallbackWarnedKeys.has(key)) return;
+        this._jsonFallbackWarnedKeys.add(key);
+        // Toast removed: this fallback is now intentional for Gemma 4.
+    },
+
+    /**
+     * Stream an OpenAI-compatible chat completion, emitting partial reasoning to onProgress.
+     * Falls back gracefully if the server returns a non-SSE body.
+     * Returns: { content, reasoningContent, message } shaped like the non-streaming `data.choices[0]`.
+     */
+    async streamChatCompletion({ endpoint, headers, body, onProgress, onChunk, signal, lineCount = 0, responseMode = "prompt" }) {
+        const streamingBody = { ...body, stream: true, stream_options: { include_usage: true } };
+
+        // Chain external signal with an internal AbortController so we can also abort
+        // proactively when we detect the model is wasting tokens on Pass 3 / Pass 4 redrafts.
+        const localController = new AbortController();
+        let earlyAbortReason = null; // Set when we abort proactively (vs. timeout / user cancel)
+        if (signal) {
+            if (signal.aborted) localController.abort(signal.reason);
+            else signal.addEventListener("abort", () => localController.abort(signal.reason), { once: true });
+        }
+
+        const response = await fetch(endpoint, {
+            method: "POST",
+            headers: { ...headers, "Accept": "text/event-stream" },
+            body: JSON.stringify(streamingBody),
+            signal: localController.signal,
+        });
+        if (!response.ok) {
+            // Let the caller's error pipeline format this
+            let errBody = "";
+            try { errBody = await response.text(); } catch (_) { }
+            const err = new Error(`HTTP ${response.status}${errBody ? `: ${errBody.slice(0, 300)}` : ""}`);
+            err.status = response.status;
+            throw err;
+        }
+        if (!response.body || !response.body.getReader) {
+            // Non-streaming fallback
+            const data = await response.json();
+            const message = data?.choices?.[0]?.message || {};
+            return {
+                content: message.content || "",
+                reasoningContent: this.extractReasoningFromMessage(message),
+                message,
+            };
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
+        let contentBuf = "";
+        let reasoningBuf = ""; // From delta.reasoning_content
+        let lastEmit = 0;
+        let pendingDirty = false; // Set when a chunk arrives during the throttle window
+        let trailingTimer = null;
+
+        // Throttle window for onProgress emissions.
+        //   - Each emit triggers a React re-render of <App> (state update for reasoningStreams).
+        //   - Reading speed of humans on streaming text caps at ~5fps usefully; faster only burns CPU.
+        //   - 250ms = ~4fps: feels live, ~3x fewer re-renders than the previous 80ms throttle.
+        const THROTTLE_MS = 250;
+
+        const doEmit = () => {
+            if (typeof onProgress !== "function") return;
+            lastEmit = Date.now();
+            pendingDirty = false;
+            const inline = this.extractStreamingReasoning(contentBuf);
+            const merged = [reasoningBuf, inline].filter(Boolean).join("\n\n").trim();
+            try { onProgress({ reasoning: merged, content: contentBuf }); } catch (_) { }
+        };
+
+        const emitProgress = (force = false) => {
+            if (typeof onProgress !== "function") return;
+            if (force) {
+                // Cancel any pending trailing emit and flush immediately
+                if (trailingTimer) { clearTimeout(trailingTimer); trailingTimer = null; }
+                doEmit();
+                return;
+            }
+            const now = Date.now();
+            const elapsed = now - lastEmit;
+            if (elapsed >= THROTTLE_MS) {
+                doEmit();
+            } else if (!trailingTimer) {
+                // Schedule a trailing emit so the LAST chunk in the window isn't lost.
+                pendingDirty = true;
+                trailingTimer = setTimeout(() => {
+                    trailingTimer = null;
+                    if (pendingDirty) doEmit();
+                }, THROTTLE_MS - elapsed);
+            } else {
+                // A trailing emit is already scheduled; just mark the buffer dirty
+                pendingDirty = true;
+            }
+        };
+
+        // Final message-shaped object built from accumulated deltas
+        const finalMessage = { role: "assistant", content: "" };
+        let usage = null;
+
+        // ── Pass 3 / Pass 4 redraft detector ────────────────────────────────────
+        // Larger LLMs sometimes emit the full N-line draft once, then start restating
+        // the entire thing inside the FINAL REPLY channel ("Pass 3" audit pattern).
+        // This burns the token budget, hits provider caps, and slows perceived latency.
+        //
+        // We do NOT wait for Pass 3/4 to finish — we **cut the stream as soon** as a
+        // second `<1>` opens after `<2>` (first full draft boundary), keep `contentBuf`
+        // up to that point, then `reader.cancel()` and return. User gets the first
+        // draft immediately; we avoid aborting the whole `fetch` (which felt like a
+        // hard failure / wasted wait).
+        //
+        // Only enabled for tag-based output (prompt mode) with N >= 3 lines.
+        // Reasoning-channel redrafts are NOT auto-aborted (risk of losing answer if
+        // the final reply hasn't started yet) — those are mitigated by the prompt rules
+        // and by max_tokens caps.
+        const useRedraftDetector = responseMode !== "json_schema" && lineCount >= 3;
+        let lastContentLen = -1; // skip work on chunks that didn't grow contentBuf
+
+        // ── Reasoning-channel redraft ANNOUNCEMENT detector ─────────────────────
+        // Gemma 4 31B (and other chatty thinkers) reliably write one of these phrases
+        // in reasoning *just before* doing a forbidden full redraft. We can't safely
+        // abort (no output has been emitted yet), but we log once so the user can see
+        // the prompt was violated, and so a future pass can trigger auto-fallback.
+        const redraftTriggerRe = /(double[-\s]?check(?:ing)?\s+(?:the\s+)?line\s+count|let'?s\s+refine\s+once\s+more|one\s+more\s+(?:refinement|pass)|cleaner\s+version|let\s+me\s+write\s+it\s+out\s+again|complete\s+revised\s+version|double[-\s]?check(?:ing)?\s+(?:the\s+)?flow|just\s+to\s+be\s+sure,?\s+here\s+are\s+all|for\s+clarity,?\s+here\s+is\s+the\s+final\s+list)/i;
+        let reasoningRedraftLogged = false;
+        let lastReasoningLen = 0;
+        const checkReasoningRedraftAnnounce = () => {
+            if (reasoningRedraftLogged) return;
+            if (reasoningBuf.length === lastReasoningLen) return;
+            // Only scan the new tail (plus a small overlap) to avoid O(n²).
+            const start = Math.max(0, lastReasoningLen - 60);
+            const tail = reasoningBuf.slice(start);
+            lastReasoningLen = reasoningBuf.length;
+            const m = tail.match(redraftTriggerRe);
+            if (m) {
+                reasoningRedraftLogged = true;
+                try {
+                    console.warn(
+                        `[GeminiClient] Reasoning-redraft trigger detected ("${m[0]}"). ` +
+                        `Model is likely about to full-redraft in reasoning; expect extra latency. ` +
+                        `Consider lowering Reasoning Effort or switching to Gemma 4 26B A4B for long lyrics.`
+                    );
+                } catch (_) { }
+            }
+        };
+
+        // ── SILENT redraft detector (no announcement phrase, just re-enumeration) ───
+        // Catches the case where the model goes from "Line 40: ..." straight back to
+        // "1: ..." without any "let me refine" phrase. Heuristic:
+        //   1) Scan reasoning for line-number markers: `^\s*(Line )?N[:.)]`
+        //   2) Track the max N we've seen.
+        //   3) If max N reaches >= floor(lineCount * 0.7) — i.e. model is near/at end of
+        //      its first draft — and then we see marker `1:` or `Line 1:` again, flag.
+        // Log-only (no abort): reasoning has no tag structure, so aborting risks losing
+        // the final answer. But the log lets the user diagnose and manually switch models.
+        let silentRedraftLogged = false;
+        let maxLineSeen = 0;
+        let silentScanFrom = 0;
+        const lineMarkerRe = /(?:^|\n)\s*(?:\*\s+)?(?:Line\s+|L)?(\d{1,3})\s*[:.)]/gmi;
+        const checkReasoningSilentRedraft = () => {
+            if (silentRedraftLogged) return;
+            if (lineCount < 10) return; // only long songs have this pathology
+            if (reasoningBuf.length - silentScanFrom < 20) return;
+            const threshold = Math.max(5, Math.floor(lineCount * 0.7));
+            // Scan only the new tail (with overlap in case a marker spans the boundary).
+            const overlap = Math.max(0, silentScanFrom - 5);
+            const tail = reasoningBuf.slice(overlap);
+            silentScanFrom = reasoningBuf.length;
+            lineMarkerRe.lastIndex = 0;
+            let m;
+            while ((m = lineMarkerRe.exec(tail)) !== null) {
+                const n = parseInt(m[1], 10);
+                if (!n || n > lineCount + 2) continue; // skip junk numbers
+                if (maxLineSeen >= threshold && n === 1) {
+                    silentRedraftLogged = true;
+                    try {
+                        console.warn(
+                            `[GeminiClient] SILENT reasoning redraft detected ` +
+                            `(reached line ${maxLineSeen}/${lineCount}, then restarted at 1). ` +
+                            `Model is doing a full-list redraft in reasoning without announcing it. ` +
+                            `Expect large added latency. For 40+ line songs, Gemma 4 26B A4B or Gemini ` +
+                            `2.5 Flash will complete in a fraction of the time.`
+                        );
+                    } catch (_) { }
+                    break;
+                }
+                if (n > maxLineSeen) maxLineSeen = n;
+            }
+        };
+        // ────────────────────────────────────────────────────────────────────────
+
+        const checkRedraftAbort = () => {
+            if (!useRedraftDetector || earlyAbortReason || localController.signal.aborted) return;
+            if (contentBuf.length === lastContentLen) return;
+            lastContentLen = contentBuf.length;
+
+            // Only treat a *second* opening tag for line 1 (e.g. <1>, ＜1＞, 【1】, ＜１＞) as Pass-3 full redraft
+            // AFTER line 2 has started (<2>, ＜2＞, 【2】, ＜２＞).
+            // We require the line 1 tag to be at a tag/line boundary to avoid false aborts on numbers or ruby tags in lyrics.
+            const tag1Re = /(?:^|\n)\s*([<＜【［][1１][>＞】］])/;
+            const match1 = contentBuf.match(tag1Re);
+            if (!match1) return;
+            const firstOpenIdx = match1.index + (match1[0].length - match1[1].length);
+
+            const close1Match = contentBuf.slice(firstOpenIdx).match(/[<＜【［][\/／][1１][>＞】］]/);
+            if (!close1Match) return;
+            const firstCloseIdx = firstOpenIdx + close1Match.index + close1Match[0].length;
+
+            const match2 = contentBuf.slice(firstCloseIdx).match(/(?:^|\n|[<＜【［][\/／][0-9０-９]+[>＞】］]\s*)\s*([<＜【［][2２][>＞】］])/);
+            if (!match2) return;
+            const line2OpenIdx = firstCloseIdx + match2.index + (match2[0].length - match2[1].length);
+
+            // Search for a second line-1 tag strictly after a closing tag or at the start of a newline after line 2 started
+            const rest = contentBuf.slice(line2OpenIdx);
+            const redraftMatch = rest.match(/(?:^|\n|[<＜【［][\/／][0-9０-９]+[>＞】］]\s*\n?)\s*([<＜【［][1１][>＞】］])/);
+            if (!redraftMatch) return;
+            const secondOpenIdx = line2OpenIdx + redraftMatch.index + (redraftMatch[0].length - redraftMatch[1].length);
+
+            // Check that after secondOpenIdx, there is confirmation of redraft (closing </1> or subsequent tag <2>)
+            const afterRedraft = contentBuf.slice(secondOpenIdx);
+            const isConfirmedRedraft = /[<＜【［][\/／][1１][>＞】］]/.test(afterRedraft) || /[<＜【［][2２][>＞】］]/.test(afterRedraft);
+            if (!isConfirmedRedraft) return;
+
+            contentBuf = contentBuf.slice(0, secondOpenIdx);
+            earlyAbortReason = "content-redraft";
+            // Reader cancel is done in the SSE loop (await reader.cancel()) so we don't
+            // abort the whole request — that produced AbortError noise and felt like blocking.
+        };
+        // ────────────────────────────────────────────────────────────────────────
+
+        // SSE parser loop (matches modelTest.html style)
+        // Lines: "data: {...}" or "data: [DONE]"
+        try {
+            // eslint-disable-next-line no-constant-condition
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                if (typeof onChunk === "function") {
+                    try { onChunk(); } catch (_) {}
+                }
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n");
+                buffer = lines.pop() ?? "";
+
+                for (const line of lines) {
+                    const t = line.trim();
+                    if (!t || t === "data: [DONE]" || t === ":") continue;
+                    if (!t.startsWith("data:")) continue;
+                    const jsonStr = t.slice(5).trim();
+                    if (!jsonStr || jsonStr === "[DONE]") continue;
+                    let chunk;
+                    try { chunk = JSON.parse(jsonStr); } catch (_) { continue; }
+
+                    if (chunk.usage) usage = chunk.usage;
+                    const choice = chunk.choices?.[0];
+                    if (!choice) continue;
+
+                    const delta = choice.delta || {};
+                    if (typeof delta.content === "string" && delta.content) {
+                        contentBuf += delta.content;
+                        emitProgress(false);
+                    }
+                    // Some providers stream thinking in a separate channel
+                    const dr = delta.reasoning_content ?? delta.reasoning ?? delta.thought ?? delta.thinking;
+                    if (typeof dr === "string" && dr) {
+                        reasoningBuf += dr;
+                        emitProgress(false);
+                    }
+                }
+
+                checkRedraftAbort();
+                checkReasoningRedraftAnnounce();
+                checkReasoningSilentRedraft();
+                if (earlyAbortReason) {
+                    try { await reader.cancel(); } catch (_) { /* already closed */ }
+                    break;
+                }
+            }
+        } catch (e) {
+            // Legacy path: if something still aborts the fetch while earlyAbortReason is set.
+            const isAbort = e && (e.name === "AbortError" || e.code === 20 || /aborted/i.test(e.message || ""));
+            if (!isAbort || !earlyAbortReason) throw e;
+            DebugLogger.log(`[Lyrics+] Stream aborted early: ${earlyAbortReason} — kept first complete draft, dropped redraft.`);
+        }
+        if (earlyAbortReason === "content-redraft") {
+            DebugLogger.log(`[Lyrics+] Pass 3/4 redraft suppressed — first draft returned immediately (stream cut, not blocked).`);
+        }
+        // Flush any tail bytes
+        try { buffer += decoder.decode(); } catch (_) { }
+        emitProgress(true);
+
+        finalMessage.content = contentBuf;
+        if (reasoningBuf) finalMessage.reasoning_content = reasoningBuf;
+
+        return {
+            content: contentBuf,
+            reasoningContent: reasoningBuf,
+            message: finalMessage,
+            usage,
+            earlyAbortReason,
+        };
+    },
+
+    /**
+     * Compute a safe `max_tokens` budget from the song length so long lyrics don't get truncated mid-JSON.
+     * Heuristic per line:
+     *   Translation: ~80 tokens (VI words + tag/JSON overhead + safety)
+     *   Phonetic:    ~60 tokens (romanization is shorter than VI translation)
+     * Floor at 2000 (short songs / single quote requests), cap at 16000 (provider limits).
+     */
+    estimateMaxTokens(lineCount, wantSmartPhonetic, wantFurigana = false) {
+        const perLine = wantFurigana ? 160 : (wantSmartPhonetic ? 60 : 250);
+        const overhead = 400; // JSON wrapper, system echoes, reasoning tag boilerplate
+        const estimated = lineCount * perLine + overhead;
+        return Math.min(16000, Math.max(2000, estimated));
+    },
+
+    async callGemini({ apiKey, artist, title, text, styleKey, pronounKey, wantSmartPhonetic, wantFurigana, _isRetry, priority, taskId, onReasoningProgress, targetLang = "vi", trackMetadata = null }) {
+        const startTime = Date.now();   
+        const rawLines = text.split('\n');
+        const lineCount = rawLines.length;
+
+        DebugLogger.group(`${wantSmartPhonetic ? 'Phonetic' : 'Translation'} Request`);
+
+        const endpoint = CONFIG?.visual?.["gemini:endpoint"] || "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+        let model = CONFIG?.visual?.["gemini:model"] || "gemini-3.6-flash";
+        if (wantSmartPhonetic) {
+            model = CONFIG?.visual?.["gemini:phonetic-model"] || "gemini-3.5-flash-lite";
+        }
+        let responseMode = CONFIG?.visual?.["gemini:response-mode"] || "prompt";
+
+        // Auto-demote JSON Schema → Prompt Engineering for models that don't support it
+        // (e.g. Gemma 1/2/3 on Google API reject both `system` role and `response_format`).
+        if (responseMode === "json_schema" && !this.modelSupportsJsonSchema(endpoint, model)) {
+            DebugLogger.log(`Model "${model}" doesn't support JSON Schema on this endpoint — falling back to Prompt Engineering mode.`);
+            this.warnJsonSchemaUnsupported(endpoint, model);
+            responseMode = "prompt";
+        }
+
+        if (!apiKey?.trim()) throw new Error("Missing API key");
+
+        const headers = {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`
+        };
+
+        let body;
+
+        // Read reasoning effort early so prompt builders can tune their thinking rules
+        // (strict anti-redraft on low, unleashed on high).
+        const reasoningEffort = CONFIG?.visual?.["gemini:reasoning-effort"] || "low";
+
+        const ep = (endpoint || "").toLowerCase();
+        const m = (model || "").toLowerCase();
+        const isGoogle = ep.includes("generativelanguage.googleapis.com");
+        const supportsSystemRole = !(isGoogle && /^gemma-[123](?:[^\d]|$)/.test(m));
+        const isGemma4Google = isGoogle && /^gemma-4(?:[^\d]|$)/.test(m);
+        const isGeminiWithBudget = /gemini-(2\.5|[3-9])|flash-thinking|thinking-exp/.test(m);
+
+        // A model is thinking if it's Gemma 4 (forced thinking on Google API) OR
+        // if it's Gemini with thinking budget and reasoning effort is not "off".
+        const isThinkingActive = isGemma4Google || (isGeminiWithBudget && reasoningEffort !== "off");
+
+        // Calculate max_tokens budget. If the model is actively thinking, the reasoning block
+        // will consume thousands of tokens. We must dynamically scale the token budget based
+        // on reasoning effort (low -> +512, medium -> +2048, high -> +8192) to avoid truncation,
+        // and cap it at 16000 (standard provider maximum).
+        let tokens = this.estimateMaxTokens(lineCount, wantSmartPhonetic, wantFurigana);
+        if (isThinkingActive) {
+            const budgetOffset = reasoningEffort === "off" ? 0 
+                               : reasoningEffort === "low" ? 512 
+                               : reasoningEffort === "medium" ? 2048 
+                               : 8192;
+            tokens = Math.min(16000, Math.max(tokens + budgetOffset, 6144));
+        }
+
+        if (responseMode === "json_schema") {
+            // JSON Schema mode: system/user split + response_format
+            let prompt;
+            if (_isRetry) {
+                prompt = {
+                    system: wantSmartPhonetic ? "You are a phonetic transcriber. Output valid JSON only." : "You are a translator. Output valid JSON only.",
+                    user: Prompts.buildMinimalFallbackPrompt({ artist, title, text, wantSmartPhonetic, wantFurigana, targetLang })
+                };
+            } else if (wantSmartPhonetic) {
+                prompt = Prompts.buildJsonSchemaPhoneticPrompt({ artist, title, text, wantFurigana, reasoningEffort });
+            } else {
+                prompt = Prompts.buildJsonSchemaTranslationPrompt({ artist, title, text, styleKey, pronounKey, reasoningEffort, targetLang, trackMetadata });
+            }
+
+            body = {
+                model,
+                messages: [
+                    { role: "system", content: prompt.system },
+                    { role: "user", content: prompt.user }
+                ],
+                temperature: wantSmartPhonetic ? 0.35 : 1,
+                max_tokens: tokens,
+                response_format: { type: "json_object" }
+            };
+        } else {
+            // Prompt Engineering mode
+            let prompt;
+            if (_isRetry) {
+                prompt = {
+                    system: wantSmartPhonetic ? "You are a phonetic transcriber. Output compact tags <1>...</1> only." : "You are a translator. Output compact tags <1>...</1> only.",
+                    user: Prompts.buildMinimalFallbackTagsPrompt({ artist, title, text, wantSmartPhonetic, wantFurigana, targetLang })
+                };
+            } else {
+                prompt = Prompts.buildPromptEngPrompt({ artist, title, text, styleKey, pronounKey, wantSmartPhonetic, wantFurigana, reasoningEffort, targetLang, trackMetadata });
+            }
+
+            let msgs = [];
+            if (supportsSystemRole) {
+                msgs.push({ role: "system", content: prompt.system });
+            }
+
+            if (supportsSystemRole) {
+                msgs.push({ role: "user", content: prompt.user });
+            } else {
+                msgs.push({ role: "user", content: `${prompt.system}\n\n---\n\n${prompt.user}` });
+            }
+
+            // Force greedy decoding (temperature: 0) for Gemma 4 to stop it from 
+            // hallucinating and redrafting endlessly in its forced thinking block.
+            let temp = wantSmartPhonetic ? 0.35 : 0.7;
+            if (isGemma4Google) temp = 0.0;
+
+            body = {
+                model,
+                messages: msgs,
+                temperature: temp,
+                max_tokens: tokens,
+                safetySettings: [
+                    { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                    { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                    { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                    { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                ]
+            };
+        }
+
+        // Apply provider-specific reasoning-effort flags (already read above to feed the prompt).
+        // Phonetic tasks (Furigana / Romaji / Pinyin) are pure mechanical transcription and must never send reasoning flags.
+        if (!wantSmartPhonetic && reasoningEffort !== "default") {
+            this.applyReasoningEffort(body, endpoint, model, reasoningEffort);
+        }
+
+        try {
+            const selectedQueue = wantSmartPhonetic ? geminiQueuePhonetic : geminiQueueTranslation;
+            const disableQueue = CONFIG?.visual?.["gemini:disable-queue"] === true;
+
+            const makeRequest = async () => {
+                const streamed = await this.fetchWithRetry(async () => {
+                    const controller = new AbortController();
+                    // Connection timeouts:
+                    // 1) Initial connect timeout: if Google queues/stalls the connection for >45s without sending headers/tokens,
+                    //    abort early with isStalledConnect to let key rotation switch to a fast key immediately.
+                    //    45s provides ample room for Gemini reasoning and large lyric prompt processing without false aborts.
+                    // 2) Streaming idle timeout: once streaming, allow up to 45s between chunks for long deliberation.
+                    const CONNECT_TIMEOUT_MS = 45000;
+                    const STREAM_IDLE_MS = 45000;
+                    let hasReceivedFirstChunk = false;
+                    let idleAbort = false;
+                    let isStalledConnect = false;
+
+                    let idleTimer = setTimeout(() => {
+                        idleAbort = true;
+                        if (!hasReceivedFirstChunk) isStalledConnect = true;
+                        try { controller.abort(new DOMException("Initial connection timed out", "AbortError")); } catch (_) {}
+                    }, CONNECT_TIMEOUT_MS);
+
+                    const resetIdle = () => {
+                        if (idleAbort) return;
+                        hasReceivedFirstChunk = true;
+                        clearTimeout(idleTimer);
+                        idleTimer = setTimeout(() => { idleAbort = true; try { controller.abort(new DOMException("Stream idle timed out", "AbortError")); } catch (_) {} }, STREAM_IDLE_MS);
+                    };
+                    try {
+                        return await this.streamChatCompletion({
+                            endpoint,
+                            headers,
+                            body,
+                            signal: controller.signal,
+                            lineCount,
+                            responseMode,
+                            onChunk: () => {
+                                resetIdle();
+                            },
+                            onProgress: ({ reasoning }) => {
+                                resetIdle();
+                                if (typeof onReasoningProgress === "function" && reasoning) {
+                                    try { onReasoningProgress(reasoning); } catch (_) { }
+                                }
+                            },
+                        });
+                    } catch (e) {
+                        if (!e.endpoint) { try { e.endpoint = endpoint; } catch (_) {} }
+                        if (!e.model) { try { e.model = model; } catch (_) {} }
+                        if (idleAbort) { try { e.idleAbort = true; } catch (_) {} }
+                        if (isStalledConnect) { try { e.isStalledConnect = true; } catch (_) {} }
+                        throw e;
+                    } finally { clearTimeout(idleTimer); }
+                });
+
+                // Adapt streamed result to the shape processResponse expects
+                const data = { choices: [{ message: streamed.message }], usage: streamed.usage };
+                return this.processResponse(data, responseMode, wantSmartPhonetic, lineCount, startTime, _isRetry, rawLines, targetLang, wantFurigana);
+            };
+
+            if (disableQueue) {
+                return await makeRequest();
+            } else {
+                return await selectedQueue.add(makeRequest, priority, taskId);
+            }
+
+        } catch (error) {
+            const errorMsg = error.message || 'Unknown+ error';
+            
+            console.error(`[Lyrics+] Translation Error:`, { 
+                message: errorMsg, 
+                status: error.status,
+                model: error.model || model,
+                endpoint: error.endpoint || endpoint,
+                responseMode,
+                stack: error.stack
+            });
+            console.groupEnd();
+
+            // Retry with fallback prompt ONLY if format/parsing validation failed on a successful HTTP response.
+            // Do NOT retry with fallback prompt for HTTP status errors (400, 429, 503, etc.) or network aborts.
+            const isFormatError = !error.status && /Format validation|JSON format|parse|Empty response/i.test(errorMsg);
+            if (isFormatError && !_isRetry && error.name !== 'AbortError') {
+                console.log('[Lyrics+] Retrying with fallback minimal prompt...');
+                return this.callGemini({
+                    apiKey, artist, title, text,
+                    styleKey: 'literal_study', pronounKey: 'default',
+                    wantSmartPhonetic, wantFurigana, _isRetry: true,
+                    onReasoningProgress, targetLang, trackMetadata
+                });
+            }
+
+            // Build user-friendly error message
+            let userMessage = errorMsg;
+            
+            if (!error.status) {
+                if (error.name === 'AbortError') {
+                    userMessage = error.idleAbort
+                        ? (error.isStalledConnect 
+                            ? `Connection stalled: no response from API for 45s. The model may be overloaded.`
+                            : `Request timed out: no response from API for 45s. The model may be overloaded or stuck.`)
+                        : `Request cancelled.`;
+                } else if (error.message?.includes('fetch') || error.message?.includes('network') || error.message?.includes('Failed to fetch')) {
+                    userMessage = `Network Error. Check your internet connection and API endpoint: ${endpoint}`;
+                } else {
+                    userMessage = `Connection failed: ${errorMsg}`;
+                }
+            } else if (error.status === 500) {
+                userMessage = `Server Error (500). The API is temporarily unavailable. Try again later.`;
+            } else if (error.status === 502 || error.status === 503 || error.status === 504) {
+                userMessage = `Service Unavailable (${error.status}). The API is overloaded or down. Try again later.`;
+            } else if (error.status === 404) {
+                userMessage = `Model Not Found (404). The model '${error.model || model}' may not be available at this endpoint.`;
+            } else if (error.status === 401 || error.status === 403) {
+                userMessage = `Authentication Failed (${error.status}). Check your API Key in Settings.`;
+            } else if (error.status === 429) {
+                userMessage = `Rate Limit Exceeded (429). Too many requests. Please wait a moment.`;
+            } else if (error.status === 400) {
+                userMessage = `Bad Request (400). ${errorMsg.replace(/^HTTP 400:\s*/, '').substring(0, 100)}`;
+            }
+            
+            // Suppress notification toast if the error is already handled by internal retry/key rotation, is 429, or is 503
+            const isHandledInternally = error.status === 429 || error.status === 503 || error.idleAbort || error.isStalledConnect || _isRetry || /Format validation|leaked reasoning/i.test(errorMsg);
+            const shouldNotify = !isHandledInternally;
+            
+            if (shouldNotify) {
+                try {
+                    if (this.shouldShowNotification(userMessage)) {
+                        Spicetify.showNotification(userMessage.substring(0, 100), true, 5000);
+                    }
+                } catch (e) { /* Spicetify not available */ }
+            }
+            
+            // Some native errors (DOMException / AbortError) have a getter-only `message`
+            // property. Assigning directly throws "Cannot set property message of which has
+            // only a getter". Wrap into a plain Error so the UI shows the friendly message.
+            try {
+                error.message = userMessage;
+                throw error;
+            } catch (assignErr) {
+                if (assignErr === error) throw error; // original re-throw path
+                const wrapped = new Error(userMessage);
+                wrapped.name = error.name;
+                wrapped.status = error.status;
+                wrapped.model = error.model || model;
+                wrapped.endpoint = error.endpoint || endpoint;
+                wrapped.idleAbort = error.idleAbort;
+                wrapped.cause = error;
+                throw wrapped;
+            }
+        }
+    },
+
+    /** Pull reasoning from non-content fields (o-series, some gateways) */
+    extractReasoningFromMessage(message) {
+        if (!message || typeof message !== "object") return "";
+        const pick = message.reasoning_content ?? message.reasoning ?? message.thought ?? message.thinking;
+        if (typeof pick === "string") return pick.trim();
+        if (Array.isArray(pick)) {
+            return pick
+                .map((x) => (typeof x === "string" ? x : x?.text ?? x?.content ?? ""))
+                .filter(Boolean)
+                .join("\n\n")
+                .trim();
+        }
+        return "";
+    },
+
+    processResponse(data, responseMode, wantSmartPhonetic, lineCount, startTime, isRetry = false, sourceLines = [], targetLang = "vi", wantFurigana = false) {
+        // OpenAI-compatible format: always data.choices[0].message.content
+        if (!data?.choices?.length) throw new Error("No response from API");
+        const message = data.choices[0]?.message;
+        const raw = message?.content;
+
+        if (!raw) throw new Error("Empty response content");
+
+        const { cleaned: cleanedRaw, reasoningContent: fromContent } = this.stripReasoningBlocks(raw);
+        const fromFields = this.extractReasoningFromMessage(message);
+        const reasoningContent = [fromContent, fromFields].filter(Boolean).join("\n\n");
+
+        // Models sometimes put the entire deliverable (including `<1>...</N>`) *inside*
+        // `<thought>...</thought>`. Stripping then removes everything → empty `cleanedRaw`.
+        // Fall back to parsing the collected thinking text (same as UI "reasoning" body).
+        let parseSource = String(cleanedRaw || "").trim();
+        if (!parseSource && String(fromContent || "").trim()) {
+            parseSource = String(fromContent).trim();
+        }
+        if (!parseSource && String(fromFields || "").trim()) {
+            parseSource = String(fromFields).trim();
+        }
+        if (!parseSource) throw new Error("Empty response after stripping thinking blocks");
+
+        let result;
+        if (responseMode === "json_schema") {
+            // JSON-Schema mode: model SHOULD return clean JSON, but reality bites:
+            //   - Some endpoints wrap in ```json fences
+            //   - Some prepend prose ("Here is the translation: {...}")
+            //   - Truncation mid-array on long songs leaves trailing garbage
+            // Always route through extractGeminiJson — its bracket-balanced slicer + object-key
+            // extraction handles all of the above cleanly. Falls back to tag/numbered parsing if
+            // the model ignored the JSON instruction entirely (e.g. Gemma without strict mode).
+            result = this.extractGeminiJson(parseSource);
+        } else {
+            // Prompt Engineering: parse compact tags / numbered list / JSON / line split
+            result = this.extractGeminiJson(parseSource);
+        }
+
+        const duration = Date.now() - startTime;
+
+        // Anti-Parroting Guard: Detect if AI echoed/copied the source lyrics without translating
+        const transLines = result.translation || result.vi;
+        if (!wantSmartPhonetic && Array.isArray(transLines) && Array.isArray(sourceLines) && sourceLines.length >= 3) {
+            let exactMatches = 0;
+            let meaningfulLines = 0;
+            const minLen = Math.min(transLines.length, sourceLines.length);
+            for (let i = 0; i < minLen; i++) {
+                const trans = (transLines[i] || "").trim().toLowerCase();
+                const orig = (sourceLines[i] || "").trim().toLowerCase();
+                // Skip empty lines, lines with only numbers/punctuation, or vocal ad-libs
+                if (!orig || /^[0-9\s\p{P}]+$/u.test(orig) || /^(yeah|la|oh|ah|woo|uh|huh)+$/i.test(orig)) {
+                    continue;
+                }
+                meaningfulLines++;
+                if (trans === orig) {
+                    exactMatches++;
+                }
+            }
+            if (meaningfulLines >= 3 && (exactMatches / meaningfulLines) >= 0.5) {
+                throw new Error(`Format validation failed: AI returned untranslated source lyrics (${exactMatches}/${meaningfulLines} lines identical)`);
+            }
+        }
+
+        // CJK Leakage Guard: In Romaji/Romaja/Pinyin mode, ensure ZERO untransliterated CJK characters remain in output
+        if (wantSmartPhonetic && !wantFurigana && Array.isArray(transLines)) {
+            const cjkRegex = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+            const leakedLine = transLines.find(l => cjkRegex.test(l));
+            if (leakedLine && !isRetry) {
+                throw new Error(`Format validation failed: AI returned untransliterated CJK characters in Romaji mode ("${leakedLine.substring(0, 50)}")`);
+            }
+        }
+
+        // Validate line count and structure integrity
+        if (transLines && transLines.length !== lineCount) {
+            const ratio = transLines.length / lineCount;
+            // If we got less than 85% of the expected lines, we treat it as a major truncation
+            // and trigger a retry (if not already a retry). Otherwise, we accept the partial
+            // translation and pad the missing lines to prevent showing a full crash/error to the user.
+            const isMajorMismatch = ratio < 0.85;
+
+            if (isMajorMismatch) {
+                throw new Error(`Format validation failed: expected ${lineCount} lines, got ${transLines.length} lines (ratio: ${ratio.toFixed(2)}).`);
+            }
+
+            DebugLogger.warn(`Line count mismatch! Expected: ${lineCount}, Got: ${transLines.length} (Ratio: ${ratio.toFixed(2)}). Padding/trimming to fit.`);
+            // Pad or trim to match expected count
+            if (transLines.length < lineCount) {
+                while (transLines.length < lineCount) transLines.push("");
+            } else if (transLines.length > lineCount) {
+                transLines.splice(lineCount);
+            }
+            result.translation = transLines;
+            result.vi = transLines;
+        }
+        // Update phonetic after any modifications
+        if (transLines) {
+            result.phonetic = transLines.join('\n');
+            result.translation = transLines;
+            result.vi = transLines;
+            if (targetLang) {
+                result[targetLang] = transLines;
+            }
+        }
+        // Log translation results for debugging
+        if (wantSmartPhonetic) {
+            DebugLogger.log(`Phonetic result:`, transLines);
+        } else {
+            DebugLogger.log(`${targetLang || "vi"} result:`, transLines);
+        }
+
+        DebugLogger.log(`Completed in ${duration}ms.`);
+        DebugLogger.groupEnd();
+        return { ...result, duration, reasoningContent };
+    }
+};
+
+window.GeminiClient = GeminiClient;

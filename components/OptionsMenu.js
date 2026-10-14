@@ -1,0 +1,591 @@
+const OptionsMenuItemIcon = react.createElement(
+	"svg",
+	{
+		width: 16,
+		height: 16,
+		viewBox: "0 0 16 16",
+		fill: "currentColor",
+	},
+	react.createElement("path", {
+		d: "M13.985 2.383L5.127 12.754 1.388 8.375l-.658.77 4.397 5.149 9.618-11.262z",
+	})
+);
+
+// Optimized OptionsMenuItem with better performance
+const OptionsMenuItem = react.memo(({ onSelect, value, isSelected }) => {
+	const menuItemProps = useMemo(() => ({
+		onClick: onSelect,
+		icon: isSelected ? OptionsMenuItemIcon : null,
+		trailingIcon: isSelected ? OptionsMenuItemIcon : null,
+	}), [onSelect, isSelected]);
+
+	return react.createElement(
+		Spicetify.ReactComponent.MenuItem,
+		menuItemProps,
+		value
+	);
+});
+
+const OptionsMenu = react.memo(({ options, onSelect, selected, defaultValue, bold = false }) => {
+	/**
+	 * <Spicetify.ReactComponent.ContextMenu
+	 *      menu = { options.map(a => <OptionsMenuItem>) }
+	 * >
+	 *      <button>
+	 *          <span> {select.value} </span>
+	 *          <svg> arrow icon </svg>
+	 *      </button>
+	 * </Spicetify.ReactComponent.ContextMenu>
+	 */
+	const menuRef = react.useRef(null);
+	return react.createElement(
+		Spicetify.ReactComponent.ContextMenu,
+		{
+			menu: react.createElement(
+				Spicetify.ReactComponent.Menu,
+				{},
+				options.map(({ key, value }) =>
+					react.createElement(OptionsMenuItem, {
+						value,
+						onSelect: () => {
+							onSelect(key);
+							// Close menu on item click
+							menuRef.current?.click();
+						},
+						isSelected: selected?.key === key,
+					})
+				)
+			),
+			trigger: "click",
+			action: "toggle",
+			renderInline: false,
+		},
+		react.createElement(
+			"button",
+			{
+				className: "optionsMenu-dropBox",
+				ref: menuRef,
+			},
+			react.createElement(
+				"span",
+				{
+					className: bold ? "main-type-mestoBold" : "main-type-mesto",
+				},
+				selected?.value || defaultValue
+			),
+			react.createElement(
+				"svg",
+				{
+					height: "16",
+					width: "16",
+					fill: "currentColor",
+					viewBox: "0 0 16 16",
+				},
+				react.createElement("path", {
+					d: "M3 6l5 5.794L13 6z",
+				})
+			)
+		)
+	);
+});
+
+const ICONS = {
+	provider: `<path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zM8 10.93a2.93 2.93 0 1 1 0-5.86 2.93 2.93 0 0 1 0 5.86z"/>`,
+	display: `<path d="M1 1h5v5H1V1zm6 0h8v5H7V1zm-6 6h5v8H1V7zm6 0h8v8H7V7z"/>`,
+	mode: `<path d="M10.5 1a.5.5 0 0 1 .5.5v12a.5.5 0 0 1-1 0v-12a.5.5 0 0 1 .5-.5zm-4 0a.5.5 0 0 1 .5.5v12a.5.5 0 0 1-1 0v-12a.5.5 0 0 1 .5-.5zm-4 0a.5.5 0 0 1 .5.5v12a.5.5 0 0 1-1 0v-12a.5.5 0 0 1 .5-.5z"/>`,
+	language: `<path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zM1.026 7.5h1.332c.05.586.13 1.15.24 1.696-1.012-.34-1.782-.93-2.13-1.696zM14.974 7.5h-1.332a10.034 10.034 0 0 1-.24 1.696c1.012-.34 1.782-.93 2.13-1.696zM8 15c-1.07 0-2.096-.21-3.034-.604a.5.5 0 0 0-.416.924C5.59 15.8 6.758 16 8 16s2.41-.2 3.45-.68a.5.5 0 0 0-.416-.924C10.096 14.79 9.07 15 8 15zm0-1.5c.983 0 1.912-.18 2.76-.502.848-.323 1.543-.8 2.062-1.405.519-.604.85-1.353.972-2.155H2.206c.122.802.453 1.551.972 2.155.519.605 1.214 1.082 2.062 1.405C6.088 13.32 7.017 13.5 8 13.5z"/>`,
+	style: `<path d="M7.467.133a.565.565 0 0 1 1.066 0l1.236 4.197c.107.363.393.649.756.756l4.197 1.236a.565.565 0 0 1 0 1.066l-4.197 1.236a1.248 1.248 0 0 0-.756.756l-1.236 4.197a.565.565 0 0 1-1.066 0l-1.236-4.197a1.248 1.248 0 0 0-.756-.756L1.275 7.388a.565.565 0 0 1 0-1.066l4.197-1.236a1.25 1.25 0 0 0 .756-.756Z" />`,
+	pronoun: `<path d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1H3zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/>`,
+};
+
+const SettingRowDescription = ({ icon, text }) => {
+	return react.createElement(
+		"div",
+		{ className: "setting-row-with-icon" },
+		react.createElement("svg", {
+			width: 16,
+			height: 16,
+			viewBox: "0 0 16 16",
+			fill: "currentColor",
+			dangerouslySetInnerHTML: { __html: icon },
+		}),
+		react.createElement("span", null, text)
+	);
+};
+
+
+// Helper: open a compact options modal using existing settings styles
+function openOptionsModal(title, items, onChange, eventType = null) {
+	const container = react.createElement(
+		"div",
+		{
+			id: `${APP_NAME}-config-container`,
+			className: "lp-options-modal",
+			style: {
+				"--lp-ui-switch-on": CONFIG.visual["ui-switch-on-color"] || "var(--spice-button)",
+				"--lp-ui-switch-off": CONFIG.visual["ui-switch-off-color"] || "rgba(255,255,255,0.16)",
+				"--lp-ui-btn-bg": CONFIG.visual["ui-button-bg-color"] || "rgba(255,255,255,0.08)",
+				"--lp-ui-btn-text": CONFIG.visual["ui-button-text-color"] || "#ffffff",
+				"--lp-fab-bg": CONFIG.visual["ui-fab-bg-color"] || "rgba(20,20,20,0.72)",
+				"--lp-fab-icon": CONFIG.visual["ui-fab-icon-color"] || "var(--spice-button)",
+			}
+		},
+		react.createElement("style", {
+			dangerouslySetInnerHTML: {
+				__html: `
+#${APP_NAME}-config-container {
+	padding: 8px 16px 14px;
+	background: linear-gradient(180deg, rgba(20,20,20,.92), rgba(20,20,20,.82));
+	border-radius: 10px;
+}
+#${APP_NAME}-config-container .setting-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 12px;
+	align-items: center;
+	padding: 10px 0;
+	border-bottom: 1px solid rgba(255,255,255,.06);
+}
+#${APP_NAME}-config-container .setting-row:hover {
+	background: rgba(255,255,255,.03);
+	border-radius: 8px;
+}
+#${APP_NAME}-config-container .setting-row-with-icon {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+#${APP_NAME}-config-container .setting-row:last-child { border-bottom: none; }
+#${APP_NAME}-config-container .col.description { font-weight: 600; opacity: .9; }
+#${APP_NAME}-config-container .col.action { display: inline-flex; gap: 8px; align-items: center; justify-content: flex-end; }
+#${APP_NAME}-config-container input, #${APP_NAME}-config-container select {
+	background: rgba(255,255,255,.04);
+	border: 1px solid rgba(255,255,255,.08);
+	border-radius: 4px;
+	padding: 8px 12px;
+	width: min(320px, 100%);
+	outline: none;
+	transition: background .2s ease;
+	color: rgba(255,255,255,.95);
+}
+#${APP_NAME}-config-container select:hover {
+	background: rgba(255,255,255,.1);
+}
+#${APP_NAME}-config-container select option {
+	background-color: #121212;
+	color: #f2f2f2;
+}
+#${APP_NAME}-config-container select option:hover {
+	background-color: #2a2a2a;
+	color: #fff;
+}
+#${APP_NAME}-config-container select option:checked {
+	background-color: #2a2a2a;
+	color: #fff;
+}
+#${APP_NAME}-config-container .adjust-value { min-width: 48px; text-align: center; }
+#${APP_NAME}-config-container .switch, #${APP_NAME}-config-container .btn { height: 28px; }
+.lyrics-range-slider {
+	-webkit-appearance: none !important;
+	appearance: none !important;
+	width: 120px !important;
+	height: 4px !important;
+	background: rgba(255,255,255,.3) !important;
+	border-radius: 2px !important;
+	padding: 0 !important;
+	border: none !important;
+	cursor: pointer !important;
+	outline: none !important;
+}
+.lyrics-range-slider::-webkit-slider-thumb {
+	-webkit-appearance: none !important;
+	appearance: none !important;
+	width: 14px !important;
+	height: 14px !important;
+	background: var(--spice-button, #1db954) !important;
+	border-radius: 50% !important;
+	cursor: pointer !important;
+	border: none !important;
+	margin-top: -5px;
+}
+.lyrics-range-slider::-moz-range-thumb {
+	width: 14px !important;
+	height: 14px !important;
+	background: var(--spice-button, #1db954) !important;
+	border-radius: 50% !important;
+	cursor: pointer !important;
+	border: none !important;
+}
+.lyrics-range-slider::-webkit-slider-runnable-track {
+	height: 4px;
+	background: rgba(255,255,255,.3);
+	border-radius: 2px;
+}
+.lyrics-range-number {
+	width: 50px !important;
+	padding: 4px 6px !important;
+	text-align: center !important;
+	font-size: 13px !important;
+}
+.lyrics-range-number::-webkit-inner-spin-button,
+.lyrics-range-number::-webkit-outer-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+`
+			}
+		}),
+		react.createElement(OptionList, Object.assign({ items, onChange }, eventType ? { type: eventType } : {}))
+	);
+
+	Spicetify.PopupModal.display({ title, content: container, isLarge: true });
+}
+
+// Debounce handle for adjustments modal
+let adjustmentsDebounceTimeout = null;
+
+// Define static options outside component to avoid recreation
+const getStaticOptions = () => {
+	const targetLang = CONFIG.visual["translate:target-language"] || "vi";
+	const Prompts = (window.LyricsPlus && window.LyricsPlus.Prompts) || window.Prompts || {};
+	const langObj = Prompts.getLanguage ? Prompts.getLanguage(targetLang) : null;
+	const targetLangName = langObj ? langObj.name : "Vietnamese";
+
+	return {
+		translationDisplay: {
+			replace: getText("contextMenu.translationDisplay.replace", {}, "Replace original"),
+			below: getText("contextMenu.translationDisplay.below", {}, "Below original"),
+		},
+		language: {
+			off: getText("contextMenu.language.off", {}, "Off"),
+			"zh-hans": getText("contextMenu.language.zhHans", {}, "Chinese (Simplified)"),
+			"zh-hant": getText("contextMenu.language.zhHant", {}, "Chinese (Traditional)"),
+			ja: getText("contextMenu.language.ja", {}, "Japanese"),
+			ko: getText("contextMenu.language.ko", {}, "Korean"),
+		},
+		modeBase: {
+			none: getText("contextMenu.modeBase.none", {}, "None"),
+		},
+		geminiModes: {
+			gemini_vi: `${targetLangName} (AI)`,
+			gemini_romaji: getText("contextMenu.geminiModes.romaji", {}, "Romaji, Romaja, Pinyin (AI)"),
+			gemini_furigana: getText("contextMenu.geminiModes.furigana", {}, "Furigana (AI)"),
+		},
+		languageModes: {
+			japanese: {
+				furigana: "Furigana",
+				romaji: "Romaji",
+				hiragana: "Hiragana",
+				katakana: "Katakana",
+			},
+			korean: {
+				romaja: "Romaja",
+			},
+			chinese: {
+				cn: "Simplified Chinese",
+				hk: "Traditional Chinese (Hong Kong)",
+				tw: "Traditional Chinese (Taiwan)",
+				pinyin: "Pinyin",
+			}
+		}
+	};
+};
+
+const getDisplayModeOptionLabel = (mode, friendlyLanguage) => {
+	if (!mode || mode === "none") return "";
+	const STATIC_OPTIONS = getStaticOptions();
+	if (STATIC_OPTIONS.geminiModes[mode]) {
+		return STATIC_OPTIONS.geminiModes[mode];
+	}
+	if (friendlyLanguage && STATIC_OPTIONS.languageModes[friendlyLanguage]?.[mode]) {
+		return `${STATIC_OPTIONS.languageModes[friendlyLanguage][mode]} (Local)`;
+	}
+	return mode.charAt(0).toUpperCase() + mode.slice(1);
+};
+
+if (window.LyricsPlus) {
+	window.LyricsPlus.getDisplayModeOptionLabel = getDisplayModeOptionLabel;
+}
+
+const getTargetLanguageOptions = () => {
+	const Prompts = (window.LyricsPlus && window.LyricsPlus.Prompts) || window.Prompts || {};
+	const langs = Prompts.languages || {};
+	const options = {};
+	for (const code of Object.keys(langs)) {
+		options[code] = langs[code].label || langs[code].name || code;
+	}
+	return Object.keys(options).length > 0 ? options : {
+		vi: "Tiếng Việt (Vietnamese)",
+		en: "English",
+		ja: "日本語 (Japanese)",
+		ko: "한국어 (Korean)",
+		zh: "中文 (Chinese)",
+		uk: "Українська (Ukrainian)"
+	};
+};
+
+// Dynamic options for Gemini, using localized strings
+const getGeminiStyleOptions = (targetLang) => ({
+	"smart_adaptive": getText("contextMenu.styles.smart_adaptive", {}, "Smart Adaptive (Recommended)"),
+	"poetic_standard": getText("contextMenu.styles.poetic_standard", {}, "Poetic & Romantic"),
+	"youth_story": getText("contextMenu.styles.youth_story", {}, "Youthful & Narrative (Anime/Indie)"),
+	"street_bold": getText("contextMenu.styles.street_bold", {}, "Bold & Street (Rap/Rock)"),
+	"vintage_classic": getText("contextMenu.styles.vintage_classic", {}, "Vintage & Classic (Classic songs)"),
+	"literal_study": getText("contextMenu.styles.literal_study", {}, "Literal (Language learning)"),
+	...(targetLang === "vi" ? Object.fromEntries(
+		Object.entries(((window.LyricsPlus && window.LyricsPlus.Prompts) || window.Prompts).styles)
+			.filter(([key]) => ["indie_dream", "street_cool", "existential_depth", "psychological_horror", "pop_sassy"].includes(key))
+			.map(([key, style]) => [key, style.name])
+	) : {})
+});
+
+const getGeminiPronounOptions = () => ({
+	"default": getText("contextMenu.pronouns.default", {}, "Auto (Based on content)"),
+	"anh_em": getText("contextMenu.pronouns.anh_em", {}, "Anh - Em"),
+	"em_anh": getText("contextMenu.pronouns.em_anh", {}, "Em - Anh"),
+	"to_cau": getText("contextMenu.pronouns.to_cau", {}, "Tớ - Cậu"),
+	"minh_ban": getText("contextMenu.pronouns.minh_ban", {}, "Tôi - Cậu"),
+	"toi_ban": getText("contextMenu.pronouns.toi_ban", {}, "Tôi - Bạn"),
+	"toi_em": getText("contextMenu.pronouns.toi_em", {}, "Tôi - Em"),
+	"ta_nguoi": getText("contextMenu.pronouns.ta_nguoi", {}, "Ta - Người"),
+	"tao_may": getText("contextMenu.pronouns.tao_may", {}, "Tao - Mày")
+});
+
+const TranslationMenu = react.memo(({ friendlyLanguage, hasTranslation }) => {
+	const items = useMemo(() => {
+		const STATIC_OPTIONS = getStaticOptions();
+		const translationDisplayOptions = STATIC_OPTIONS.translationDisplay;
+		const targetLang = CONFIG.visual["translate:target-language"] || "vi";
+		const Prompts = (window.LyricsPlus && window.LyricsPlus.Prompts) || window.Prompts || {};
+		const currentLangModule = Prompts.getLanguage ? Prompts.getLanguage(targetLang) : null;
+		const hasPronouns = currentLangModule ? !!currentLangModule.hasPronouns : (targetLang === "vi");
+
+		// Build combined display mode options: AI modes + Local modes (if available for language)
+		const combinedOptions = { ...STATIC_OPTIONS.geminiModes };
+		if (friendlyLanguage === "japanese") {
+			const localModes = STATIC_OPTIONS.languageModes[friendlyLanguage];
+			if (localModes) {
+				Object.keys(localModes).forEach(key => {
+					combinedOptions[key] = `${localModes[key]} (Local)`;
+				});
+			}
+		} else if (friendlyLanguage === "chinese" || friendlyLanguage === "korean") {
+			delete combinedOptions.gemini_furigana;
+			const localModes = STATIC_OPTIONS.languageModes[friendlyLanguage];
+			if (localModes) {
+				Object.keys(localModes).forEach(key => {
+					combinedOptions[key] = `${localModes[key]} (Local)`;
+				});
+			}
+		} else {
+			// For English / Latin / non-CJK languages: Furigana and Romaji are irrelevant
+			delete combinedOptions.gemini_furigana;
+			delete combinedOptions.gemini_romaji;
+		}
+
+		const displayModeKey = friendlyLanguage ? `translation-mode:${friendlyLanguage}` : "translation-mode:gemini";
+		const displayModeKey2 = friendlyLanguage ? `translation-mode-2:${friendlyLanguage}` : "translation-mode-2:gemini";
+
+		// Option 2 Layout: Display Mode 1 & 2 -> Display Position -> Target Language -> Style -> Pronouns
+		const baseItems = [
+			{
+				desc: react.createElement(SettingRowDescription, { icon: ICONS.mode, text: getText("contextMenu.displayMode") }),
+				key: displayModeKey,
+				type: ConfigSelection,
+				options: { none: "None", ...combinedOptions },
+				renderInline: true,
+			},
+			{
+				desc: react.createElement(SettingRowDescription, { icon: ICONS.mode, text: getText("contextMenu.displayMode2") }),
+				key: displayModeKey2,
+				type: ConfigSelection,
+				options: { none: "None", ...combinedOptions },
+				renderInline: true,
+			},
+			{
+				desc: react.createElement(SettingRowDescription, { icon: ICONS.display, text: getText("contextMenu.display") }),
+				key: "translate:display-mode",
+				type: ConfigSelection,
+				options: translationDisplayOptions,
+				renderInline: true,
+			},
+			{
+				desc: react.createElement(SettingRowDescription, { icon: ICONS.language, text: getText("contextMenu.targetLanguage", {}, "Target Language") }),
+				key: "translate:target-language",
+				type: ConfigSelection,
+				options: getTargetLanguageOptions(),
+				renderInline: true,
+			},
+			{
+				desc: react.createElement(SettingRowDescription, { icon: ICONS.style, text: getText("contextMenu.style") }),
+				key: "translate:translation-style",
+				type: ConfigSelection,
+				options: getGeminiStyleOptions(targetLang),
+				renderInline: true,
+			},
+		];
+
+		// Conditionally add Pronoun Mode only if the selected target language supports pronouns (e.g. Vietnamese)
+		if (hasPronouns) {
+			baseItems.push({
+				desc: react.createElement(SettingRowDescription, { icon: ICONS.pronoun, text: getText("contextMenu.pronoun") }),
+				key: "translate:pronoun-mode",
+				type: ConfigSelection,
+				options: getGeminiPronounOptions(),
+				renderInline: true,
+			});
+		}
+
+		return baseItems;
+	}, [friendlyLanguage, CONFIG.visual["translate:target-language"], CONFIG.visual["ui-language"]]);
+
+	// Re-dispatch dynamic items so an open modal can update its OptionList
+	useEffect(() => {
+		const event = new CustomEvent("lyrics-plus", {
+			detail: { type: "translation-menu", items },
+		});
+		document.dispatchEvent(event);
+	}, [items, friendlyLanguage, CONFIG.visual["translate:target-language"], CONFIG.visual["ui-language"]]);
+
+	// Open modal on click instead of ContextMenu to avoid xpui hook errors
+	const open = () => {
+		openOptionsModal(getText("contextMenu.conversions"), items, (name, value) => {
+			// Skip processing for info-only items
+			if (name === "language-info") {
+				return;
+			}
+
+			CONFIG.visual[name] = value;
+			if (name === "translate:pronoun-mode") {
+				const currentUri = window.lyricContainer?.currentTrackUri || Spicetify.Player?.data?.item?.uri;
+				const TrackSettings = window.LyricsPlus?.TrackSettings || window.TrackSettings;
+				if (currentUri && TrackSettings) {
+					TrackSettings.setPronoun(currentUri, value);
+				}
+			} else {
+				localStorage.setItem(`${APP_NAME}:visual:${name}`, value);
+			}
+
+			// Force re-detection of language when language override changes
+			if (name === "translate:detect-language-override" && window.lyricContainer) {
+				// Clear cached language to force re-detection
+				window.lyricContainer.setState({ language: null });
+				// Force re-render of lyrics to update language detection
+				window.lyricContainer.lastProcessedUri = null;
+				window.lyricContainer.lastProcessedMode = null;
+				window.lyricContainer.forceUpdate();
+			}
+
+			if (name.startsWith("translation-mode")) {
+				if (window.lyricContainer) {
+					window.lyricContainer.lastProcessedUri = null;
+					window.lyricContainer.lastProcessedMode = null;
+					window.lyricContainer.forceUpdate();
+				}
+			}
+
+			// Reload lyrics when target language, translation style or pronoun mode changes
+			if (name === "translate:target-language" || name === "translate:translation-style" || name === "translate:pronoun-mode") {
+				if (window.lyricContainer) {
+					// DON'T clear _dmResults - keep displaying old translation while fetching new
+					// Set flags to null so lyricsSource() detects settings change and re-fetches
+					window.lyricContainer._lastTargetLang = null;
+					window.lyricContainer._lastStyleKey = null;
+					window.lyricContainer._lastPronounKey = null;
+					window.lyricContainer.lastProcessedUri = null;
+					window.lyricContainer.lastProcessedMode = null;
+					window.lyricContainer.forceUpdate();
+				}
+				lyricContainerUpdate?.();
+				return;
+			}
+
+			lyricContainerUpdate?.();
+		}, "translation-menu");
+	};
+
+	return react.createElement(
+		Spicetify.ReactComponent.TooltipWrapper,
+		{ label: getText("tooltips.conversion") },
+		react.createElement(
+			"button",
+			{
+				className: "lyrics-config-button",
+				onClick: open,
+			},
+			react.createElement("svg", {
+				width: 16,
+				height: 16,
+				viewBox: "0 0 16 16",
+				fill: "currentColor",
+				dangerouslySetInnerHTML: {
+					__html: '<path d="M4.5 2.5a.5.5 0 0 0 0 1h7a2.5 2.5 0 0 1 2.5 2.5v1.5a.5.5 0 0 0 1 0V6A3.5 3.5 0 0 0 11.5 2.5h-7zm-3 5A.5.5 0 0 0 1 8v1.5A3.5 3.5 0 0 0 4.5 13h7a.5.5 0 0 0 0-1h-7A2.5 2.5 0 0 1 2 9.5V8a.5.5 0 0 0-.5-.5z"/><path d="M2.854 2.146a.5.5 0 0 0-.708.708l2 2a.5.5 0 0 0 .708 0l2-2a.5.5 0 1 0-.708-.708L5 3.793 2.854 2.146zm10.292 11.708a.5.5 0 0 0 .708-.708l-2-2a.5.5 0 0 0-.708 0l-2 2a.5.5 0 0 0 .708.708L11 12.207l2.146 1.647z"/>'
+				}
+			})
+		)
+	);
+});
+
+const AdjustmentsMenu = react.memo(({ mode }) => {
+	const items = [
+		// General Display
+		{ desc: getText("contextMenu.fontSize"), key: "font-size", type: ConfigAdjust, min: fontSizeLimit.min, max: fontSizeLimit.max, step: fontSizeLimit.step },
+		{ desc: getText("contextMenu.lyricPos"), key: "lyric-position", type: ConfigRange, min: 0, max: 100, step: 5 },
+
+		// Playback & Features
+		{ desc: getText("contextMenu.trackDelay"), key: "delay", type: ConfigAdjust, min: Number.NEGATIVE_INFINITY, max: Number.POSITIVE_INFINITY, step: 250, when: () => mode === SYNCED },
+		{ desc: getText("contextMenu.preTrans"), key: "pre-translation", type: ConfigSlider },
+
+		// Mode Specific
+		{ desc: getText("contextMenu.uAutoScroll"), key: "unsynced-auto-scroll", type: ConfigSlider, when: () => mode === UNSYNCED },
+	];
+
+	const onChange = (name, value) => {
+		clearTimeout(adjustmentsDebounceTimeout);
+		adjustmentsDebounceTimeout = setTimeout(() => {
+			CONFIG.visual[name] = value;
+			try {
+				Spicetify.Config.visual = Spicetify.Config.visual || {};
+				Spicetify.Config.visual[name] = value;
+			} catch { }
+			localStorage.setItem(`${APP_NAME}:visual:${name}`, value);
+			// Persist per-track delay as used by resetDelay()
+			if (name === "delay") {
+				const uri = Spicetify?.Player?.data?.item?.uri;
+				if (uri) {
+					try { localStorage.setItem(`lyrics-delay:${uri}`, String(value)); } catch { }
+				}
+			}
+			if ((name.startsWith("translation-mode:") || name.startsWith("translation-mode-2:")) && window.lyricContainer) {
+				window.lyricContainer.lastProcessedUri = null;
+				window.lyricContainer.lastProcessedMode = null;
+				window.lyricContainer.forceUpdate();
+			}
+			// Ensure live UI update for font-size/compact/etc.
+			lyricContainerUpdate?.();
+		}, 200);
+	};
+
+	const open = () => openOptionsModal(getText("contextMenu.adjustments"), items, onChange);
+
+	return react.createElement(
+		Spicetify.ReactComponent.TooltipWrapper,
+		{ label: getText("tooltips.adjustments") },
+		react.createElement(
+			"button",
+			{
+				className: "lyrics-config-button",
+				onClick: open,
+			},
+			react.createElement("svg", {
+				width: 16,
+				height: 16,
+				viewBox: "0 0 16 16",
+				fill: "currentColor",
+				dangerouslySetInnerHTML: {
+					__html: '<path d="M6 3.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM1.5 3.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 0 1H2a.5.5 0 0 1-.5-.5zM6 3h8.5a.5.5 0 0 1 0 1H6A.5.5 0 0 1 6 3zm5 4.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM1.5 7.5a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 0 1H2a.5.5 0 0 1-.5-.5zm9.5-.5h3.5a.5.5 0 0 1 0 1H11a.5.5 0 0 1 0-1zm-7 4.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM1.5 11.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 0 1H2a.5.5 0 0 1-.5-.5zm4.5-.5h8.5a.5.5 0 0 1 0 1H6a.5.5 0 0 1 0-1z"/>'
+				}
+			})
+		)
+	);
+});

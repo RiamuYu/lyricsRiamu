@@ -1,0 +1,13 @@
+# Local files only; runtime, vendored libraries, tests and docs are tracked.
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+*.log
+*.tmp
+*.bak
+*.swp
+coverage/
+.cache/
+local-data/

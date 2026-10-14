@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="title">
+<title id="title">Lyric Plus Translate — Standalone 1.10.0</title>
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#11151d"/><stop offset="1" stop-color="#273343"/></linearGradient><linearGradient id="art" x2="1" y2="1"><stop stop-color="#d29b6f"/><stop offset="1" stop-color="#456879"/></linearGradient></defs>
+<rect width="1200" height="320" rx="22" fill="url(#bg)"/><rect x="870" y="55" width="205" height="205" rx="22" fill="url(#art)" transform="rotate(8 970 155)"/>
+<g fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif"><text x="60" y="74" font-size="14" letter-spacing="4" fill="#b5c2cf">YOUR MUSIC. YOUR WORDS.</text><text x="56" y="152" font-size="58" font-weight="700" letter-spacing="-2">Lyric Plus Translate</text><text x="60" y="202" font-size="22" fill="#b5c2cf">Lyrics, translations and a listening space of your own.</text><text x="60" y="268" font-size="16" fill="#d3dfd8">STANDALONE 1.10.0 / MANUAL INSTALL / LGPL-2.1</text></g>
+<g fill="#fff" opacity=".72"><rect x="898" y="106" width="145" height="8" rx="4"/><rect x="898" y="138" width="115" height="8" rx="4"/><rect x="898" y="170" width="145" height="8" rx="4" opacity=".4"/><rect x="898" y="202" width="90" height="8" rx="4" opacity=".25"/></g></svg>
