@@ -513,3 +513,23 @@ Object.assign(window.LANG_EN.notifications, {
 });
 
 window.LANG_EN.notifications.standaloneUpdates = "Standalone builds do not auto-update. Install newer versions manually using the README.";
+
+window.LANG_EN.revision = {
+  "title": "Revise AI translation",
+  "method": "Revision method",
+  "review": "Review and retranslate",
+  "feedback": "Retranslate with feedback",
+  "context": "Context or requested corrections",
+  "example": "The narrator is female and addresses her male partner. The final verse is a farewell, not a promise.",
+  "description": "Uses the current track and settings. Auto choices are reconsidered across the song; fixed choices stay unchanged.",
+  "local": "Feedback is saved locally per track and sent only when you choose feedback mode.",
+  "cost": "Sends original lyrics and the existing translation to AI; extra tokens may be charged. No Internet research. Replaces the translation only after a valid result.",
+  "cancel": "Cancel",
+  "submit": "Retranslate",
+  "working": "Reviewing…",
+  "failed": "The new translation could not be applied. The previous version is retained. Check credentials/network or changed track/settings before retrying.",
+  "invalidResult": "The new translation has missing lines or an invalid format.",
+  "busy": "A translation review is already running.",
+  "trackChanged": "Track or settings changed. Reopen the revision dialog.",
+  "noLyrics": "No original lyrics are available for review."
+};

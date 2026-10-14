@@ -22,6 +22,14 @@ Start with Calm, Cinema or Karaoke, or save a named personal preset. Presets con
 
 Word highlighting uses existing karaoke data with real word timings. Timing is not invented for line-only lyrics.
 
+## Translation review
+
+The AI translation refresh action opens Review and retranslate / Retranslate with feedback. The latter accepts up to 2,000 characters of context, saved locally for that track. Saved feedback is not automatically sent by ordinary background translation or review-only requests.
+
+Both choices use originals and the previous translation while preserving current target language, style and fixed pronouns. Auto choices are reconsidered across the song. No Internet research is performed. A new AI request may consume additional tokens.
+
+The previous display/cache remains until a valid replacement is ready. Changed tracks, sources or settings reject the result for the current display. The offline translation-revision test verifies commit/failure behavior and prompt preservation; real model quality remains unverified. Phonetic refresh and refresh-both retain their original reset actions.
+
 ## Album and video backgrounds
 
 Settings → Background controls album-art blur, brightness, zoom and transition duration, alongside video blur, brightness, scale and fullscreen coverage.

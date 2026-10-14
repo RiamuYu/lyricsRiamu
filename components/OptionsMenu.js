@@ -1,3 +1,47 @@
+window.openTranslationRevisionModal = self => {
+	const uri = self.state.uri;
+	const feedbackKey = `lyrics-plus:translation-feedback:${uri}`;
+	const RevisionForm = () => {
+		const [choice, setChoice] = react.useState("review");
+		const [feedback, setFeedback] = react.useState(() => (ConfigUtils.getPersisted(feedbackKey) || "").slice(0, 2000));
+		const [busy, setBusy] = react.useState(false);
+		const [error, setError] = react.useState("");
+		const mounted = react.useRef(true);
+		react.useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+		const submit = async event => {
+			event.preventDefault();
+			if (busy || (choice === "feedback" && !feedback.trim())) return;
+			setBusy(true);
+			setError("");
+			try {
+				if (choice === "feedback") ConfigUtils.setPersisted(feedbackKey, feedback.trim());
+				await window.LyricsPlus.TranslationCoordinator.reviseTranslation(self, uri, choice === "feedback" ? feedback : "");
+				if (mounted.current) Spicetify.PopupModal.hide();
+			} catch (_) {
+				if (mounted.current) setError(getText("revision.failed"));
+			} finally {
+				if (mounted.current) setBusy(false);
+			}
+		};
+		return react.createElement("form", { className: "lp-revision-form", onSubmit: submit },
+			react.createElement("p", null, getText("revision.description")),
+			react.createElement("label", { htmlFor: "lp-revision-choice" }, getText("revision.method")),
+			react.createElement("select", { id: "lp-revision-choice", value: choice, disabled: busy, onChange: event => setChoice(event.target.value) },
+				react.createElement("option", { value: "review" }, getText("revision.review")),
+				react.createElement("option", { value: "feedback" }, getText("revision.feedback"))),
+			choice === "feedback" && react.createElement(react.Fragment, null,
+				react.createElement("label", { htmlFor: "lp-revision-feedback" }, getText("revision.context")),
+				react.createElement("textarea", { id: "lp-revision-feedback", rows: 6, maxLength: 2000, value: feedback, disabled: busy, placeholder: getText("revision.example"), onChange: event => setFeedback(event.target.value) }),
+				react.createElement("small", null, `${feedback.length}/2000 · ${getText("revision.local")}`)),
+			react.createElement("p", { className: "lp-revision-note" }, getText("revision.cost")),
+			error && react.createElement("p", { role: "alert" }, error),
+			react.createElement("div", { className: "lp-revision-actions" },
+				react.createElement("button", { type: "button", disabled: busy, onClick: () => Spicetify.PopupModal.hide() }, getText("revision.cancel")),
+				react.createElement("button", { type: "submit", disabled: busy || (choice === "feedback" && !feedback.trim()) }, getText(busy ? "revision.working" : "revision.submit")))) ;
+	};
+	Spicetify.PopupModal.display({ title: getText("revision.title"), isLarge: true, content: react.createElement("div", { id: "lyrics-plus-config-container", className: "lp-options-modal" }, react.createElement(RevisionForm)) });
+};
+
 const OptionsMenuItemIcon = react.createElement(
 	"svg",
 	{

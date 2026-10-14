@@ -514,3 +514,23 @@ Object.assign(window.LANG_VI.notifications, {
 });
 
 window.LANG_VI.notifications.standaloneUpdates = "Bản standalone không hỗ trợ cập nhật tự động. Cài bản mới thủ công theo README.";
+
+window.LANG_VI.revision = {
+  "title": "Dịch lại bản dịch AI",
+  "method": "Cách dịch lại",
+  "review": "Rà soát và dịch lại",
+  "feedback": "Dịch lại theo góp ý",
+  "context": "Ngữ cảnh hoặc yêu cầu sửa",
+  "example": "Người kể là nữ, đang nói với người yêu nam: dùng em–anh. Đoạn cuối là lời chia tay, không phải lời hứa.",
+  "description": "Áp dụng cho bài đang nghe và giữ setting hiện tại. Auto sẽ được rà lại theo toàn bài; lựa chọn cố định được giữ nguyên.",
+  "local": "Góp ý lưu cục bộ theo bài, chỉ gửi khi bạn chọn dịch theo góp ý.",
+  "cost": "Gửi lời gốc và bản dịch hiện có tới AI; có thể tốn thêm token. Không tra cứu Internet. Chỉ thay bản dịch khi kết quả mới hợp lệ.",
+  "cancel": "Hủy",
+  "submit": "Dịch lại",
+  "working": "Đang rà soát…",
+  "failed": "Không thể áp dụng bản dịch mới. Bản dịch trước được giữ lại; kiểm tra key, mạng hoặc bài/setting đã thay đổi rồi thử lại.",
+  "invalidResult": "Bản dịch mới không đủ dòng hoặc sai định dạng.",
+  "busy": "Đã có một lần rà soát đang chạy.",
+  "trackChanged": "Bài hát hoặc setting đã đổi. Mở lại hộp dịch lại.",
+  "noLyrics": "Không có lời gốc để rà soát."
+};

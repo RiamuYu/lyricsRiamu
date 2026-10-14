@@ -747,6 +747,15 @@ class LyricsContainer extends react.Component {
 		}
 	}
 
+	openTranslationRevision(modes = null) {
+		const selected = modes || [this.displayMode, this.displayMode2];
+		if (selected.includes("gemini_vi") && window.openTranslationRevisionModal) {
+			window.openTranslationRevisionModal(this);
+		} else {
+			this.resetTranslationCache(this.currentTrackUri, modes);
+		}
+	}
+
 	_setCurrentLyrics(arr) {
 		if (!Array.isArray(arr)) {
 			if (this.state.currentLyrics !== arr) {
@@ -1713,7 +1722,7 @@ class LyricsContainer extends react.Component {
 													Spicetify.ReactComponent.MenuItem,
 													{
 														onClick: () => {
-															this.resetTranslationCache(this.currentTrackUri, [mode1]);
+															this.openTranslationRevision([mode1]);
 														},
 													},
 													getText("tooltips.reloadMode", { mode: name1 }, `Làm mới ${name1}`)
@@ -1722,7 +1731,7 @@ class LyricsContainer extends react.Component {
 													Spicetify.ReactComponent.MenuItem,
 													{
 														onClick: () => {
-															this.resetTranslationCache(this.currentTrackUri, [mode2]);
+															this.openTranslationRevision([mode2]);
 														},
 													},
 													getText("tooltips.reloadMode", { mode: name2 }, `Làm mới ${name2}`)
@@ -1757,7 +1766,7 @@ class LyricsContainer extends react.Component {
 								label,
 							},
 							createButton(() => {
-								this.resetTranslationCache(this.currentTrackUri, singleMode ? [singleMode] : null);
+								this.openTranslationRevision(singleMode ? [singleMode] : null);
 							})
 						);
 					})(),

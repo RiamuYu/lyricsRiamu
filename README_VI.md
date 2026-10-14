@@ -70,9 +70,23 @@ Nếu có lỗi, xử lý ở bảng cuối hướng dẫn rồi mới tiếp t�
 ### Bước 3 — Tải đúng source standalone
 
 1. Tại repository **lyricsRiamu**, chọn **Code → Download ZIP**. Khi tải nhánh main, file ZIP có tên `lyricsRiamu-main.zip`; giải nén được thư mục **lyricsRiamu-main**. Repo chưa có URL cố định trong tài liệu này.
-2. Mở **lyricsRiamu-main**, tìm `index.js` và `manifest.json`. Có thể giữ nguyên tên thư mục tải về/repo; riêng thư mục cài trong CustomApps cần tên **lyrics-plus** theo cấu hình app hiện tại.
+2. **lyricsRiamu-main chính là thư mục gốc của app**, trực tiếp chứa `index.js`, `manifest.json`, các file CSS và thư mục code. Không có và không cần tìm thư mục `lyrics-plus` bên trong.
 3. Giữ cả `components`, `utils`, `services`, `providers`, `parsers`, `i18n`, `assets` và các file CSS. Không chỉ chép mỗi `index.js`.
 4. Sao lưu riêng source custom đang có. Không tải lại bản stock/upstream để thay bản standalone.
+
+Cấu trúc ngay sau khi giải nén:
+
+```text
+lyricsRiamu-main/
+├── index.js
+├── manifest.json
+├── style.css
+├── variables.css
+├── components/
+├── utils/
+├── services/
+└── ... các thư mục và file còn lại
+```
 
 ### Bước 4 — Chép vào CustomApps và nạp app
 
@@ -82,7 +96,9 @@ Xem thư mục dữ liệu của Spicetify:
 spicetify path userdata
 ```
 
-Trong thư mục được in ra, mở hoặc tạo **CustomApps/lyrics-plus**. Chép **toàn bộ nội dung bên trong lyricsRiamu-main** vào đó, gồm cả các thư mục con. Hoặc chép nguyên **lyricsRiamu-main** vào CustomApps rồi đổi tên bản chép thành **lyrics-plus**. Trên Windows, vị trí có thể là `%AppData%\spicetify\CustomApps`; một số cài đặt còn có app đi kèm tại `%LocalAppData%\spicetify\CustomApps`. Không mặc định rằng hai vị trí này là một.
+Trong thư mục được in ra, mở hoặc tạo **CustomApps**. Chép nguyên thư mục **lyricsRiamu-main** vào đó, rồi đổi tên **bản chép** thành **lyrics-plus** để dùng các lệnh đăng ký bên dưới. Đây là bước đổi tên khi cài đặt, không phải một thư mục có sẵn trong ZIP. Nếu CustomApps đã có `lyrics-plus`, sao lưu thư mục cũ trước khi thay thế.
+
+Trên Windows, vị trí có thể là `%AppData%\spicetify\CustomApps`; một số cài đặt còn có app đi kèm tại `%LocalAppData%\spicetify\CustomApps`. Không mặc định rằng hai vị trí này là một.
 
 ```text
 CustomApps/
@@ -162,6 +178,8 @@ Nếu dùng Musixmatch, dùng nút **Refresh Token** hoặc nhập token của b
 4. Phát một bài có lời và chờ request hoàn thành. Key AI không cấp quyền Spotify Premium; hạn mức/chi phí phụ thuộc provider.
 
 ### Bước 7 — Chỉnh giao diện và nền
+
+**Bản dịch chưa đúng ý?** Bấm nút làm mới bản dịch AI (nếu menu hiện nhiều chế độ, chọn mục bản dịch AI). Chọn **Rà soát và dịch lại** để AI đọc lại lời gốc và bản dịch hiện có, hoặc **Dịch lại theo góp ý** để nhập ngữ cảnh/yêu cầu sửa. Giữ setting hiện tại: Auto được xem xét lại, lựa chọn cố định được giữ nguyên. Góp ý lưu cục bộ theo bài, chỉ gửi khi chọn chế độ góp ý. Bản cũ chỉ được thay khi kết quả mới hợp lệ; không có bước tra cứu Internet. Làm mới phiên âm hoặc cả hai chế độ vẫn dùng luồng reset cũ.
 
 Trong **Appearance**, chọn font, cỡ chữ, giãn dòng hoặc preset, rồi xem mẫu trước khi lưu preset riêng. Font bản dịch/phiên âm phải có trên máy.
 

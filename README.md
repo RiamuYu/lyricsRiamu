@@ -69,9 +69,23 @@ Resolve errors before continuing. Installation commands are based on the [offici
 ### Step 3 — Download the standalone source
 
 1. On the **lyricsRiamu** repository, choose **Code → Download ZIP**. Downloading the main branch produces an archive named `lyricsRiamu-main.zip`, which extracts to **lyricsRiamu-main**. This document does not assume a published repository URL.
-2. Open **lyricsRiamu-main** and locate `index.js` and `manifest.json`. You can keep this downloaded/repository folder name; the installation folder in CustomApps must be named **lyrics-plus** for the current app configuration.
+2. **lyricsRiamu-main is the app's root folder**, directly containing `index.js`, `manifest.json`, CSS files and code directories. There is no nested `lyrics-plus` folder to find.
 3. Keep all runtime folders: `components`, `utils`, `services`, `providers`, `parsers`, `i18n`, `assets`, and the CSS files. Copying only `index.js` is insufficient.
 4. Back up existing customized source separately. Do not replace it with the stock/upstream app.
+
+Immediately after extraction:
+
+```text
+lyricsRiamu-main/
+├── index.js
+├── manifest.json
+├── style.css
+├── variables.css
+├── components/
+├── utils/
+├── services/
+└── ... remaining folders and files
+```
 
 ### Step 4 — Copy into CustomApps and load
 
@@ -81,7 +95,9 @@ Find Spicetify's user-data directory:
 spicetify path userdata
 ```
 
-Inside the printed directory, open/create **CustomApps/lyrics-plus**. Copy **all contents of lyricsRiamu-main** into that folder, including its subfolders. Alternatively, copy the entire **lyricsRiamu-main** folder into CustomApps and rename that copy to **lyrics-plus**. Windows setups may use `%AppData%\spicetify\CustomApps`; bundled apps can also exist under `%LocalAppData%\spicetify\CustomApps`. These are different locations.
+Inside the printed directory, open/create **CustomApps**. Copy the entire **lyricsRiamu-main** folder there, then rename **that copy** to **lyrics-plus** for the registration commands below. This is an installation rename, not a folder supplied inside the ZIP. Back up an existing `lyrics-plus` folder before replacing it.
+
+Windows setups may use `%AppData%\spicetify\CustomApps`; bundled apps can also exist under `%LocalAppData%\spicetify\CustomApps`. These are different locations.
 
 ```text
 CustomApps/
@@ -161,6 +177,8 @@ For Musixmatch, use **Refresh Token** or supply your own token when required. Do
 4. Play a track with lyrics and wait for the request. AI keys do not grant Spotify Premium; quotas and charges depend on the provider.
 
 ### Step 7 — Customize appearance and background
+
+**Translation needs correction?** Use the AI translation refresh action (select the translation entry if several modes appear). Choose **Review and retranslate** to revisit originals and the existing translation, or **Retranslate with feedback** to provide context/corrections. Current settings remain: Auto is reconsidered; fixed choices stay unchanged. Feedback is saved locally per track and sent only in feedback mode. The old version is replaced only after a valid result; there is no Internet research. Phonetic refresh and refresh-both retain the existing reset behavior.
 
 In **Appearance**, choose fonts, sizes, spacing or presets; inspect the sample and save personal presets. Translation/phonetic fonts must be installed locally.
 

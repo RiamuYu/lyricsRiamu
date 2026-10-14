@@ -99,6 +99,7 @@ window.LyricsPlus.TranslationCoordinator = {
 
 		const processMode = async (mode, baseLyrics) => {
 			if (!mode || mode === "none") return null;
+			if (mode === "gemini_vi" && self._revisionBusy && self._revisionUri === currentUri) return self._dmResults?.[currentUri]?.[mode] || null;
 			try {
 				if (String(mode).startsWith("gemini")) {
 					return await this.getGeminiTranslation(self, lyricsState, baseLyrics, mode);
@@ -192,6 +193,7 @@ window.LyricsPlus.TranslationCoordinator = {
 		// Async cache preload: Check CacheManager for cached translations
 		const tryLoadCachedTranslation = async (mode) => {
 			if (!mode || mode === "none" || !String(mode).startsWith("gemini")) return null;
+			const revisionVersion = self._revisionVersions?.[currentUri] || 0;
 			try {
 				const styleKey = CONFIG.visual["translate:translation-style"] || "smart_adaptive";
 				const pronounKey = CONFIG.visual["translate:pronoun-mode"] || "default";
@@ -206,6 +208,7 @@ window.LyricsPlus.TranslationCoordinator = {
 
 				// Check cache first (async - L1 then L2)
 				let memCached = await CacheManager.get(cacheKey2);
+				if (mode === "gemini_vi" && revisionVersion !== (self._revisionVersions?.[currentUri] || 0)) return self._dmResults?.[currentUri]?.[mode] || null;
 				if (!memCached && isPhonetic) {
 					// Fallback to legacy phonetic key (which included style:pronoun)
 					const legacyKey = `${currentUri}:${mode}:${styleKey}:${pronounKey}`;
@@ -472,7 +475,8 @@ window.LyricsPlus.TranslationCoordinator = {
 		});
 	},
 
-	async getGeminiTranslation(self, lyricsState, lyrics, mode, silent = false) {
+	async getGeminiTranslation(self, lyricsState, lyrics, mode, silent = false, revision = null) {
+		const revisionVersion = self._revisionVersions?.[lyricsState.uri] || 0;
 		let apiKeys = [];
 		try {
 			const rawKeys = ConfigUtils.getPersisted(`${APP_NAME}:visual:gemini-api-keys`);
@@ -515,14 +519,16 @@ window.LyricsPlus.TranslationCoordinator = {
 		const targetLang = CONFIG.visual["translate:target-language"] || "vi";
 		const cacheKey = mode;
 		// Phonetic tasks are independent of translation style and pronoun
-		const cacheKey2 = wantSmartPhonetic
+		const canonicalKey = wantSmartPhonetic
 			? `${lyricsState.uri}:${cacheKey}`
 			: (targetLang === "vi"
 				? `${lyricsState.uri}:${cacheKey}:${styleKey}:${pronounKey}`
 				: `${lyricsState.uri}:${targetLang}:${cacheKey}:${styleKey}:${pronounKey}`);
+		const cacheKey2 = revision ? `${canonicalKey}:revision` : canonicalKey;
 
 		// Await Cache (L1 -> L2 logic inside CacheManager)
-		let cached = await CacheManager.get(cacheKey2);
+		let cached = revision ? null : await CacheManager.get(cacheKey2);
+		if (!revision && mode === "gemini_vi" && (revisionVersion !== (self._revisionVersions?.[lyricsState.uri] || 0) || (self._revisionBusy && self._revisionUri === lyricsState.uri))) return self._dmResults?.[lyricsState.uri]?.[mode] || lyrics;
 		if (!cached && wantSmartPhonetic) {
 			// Fallback to legacy phonetic key (which included style:pronoun)
 			const legacyKey = `${lyricsState.uri}:${cacheKey}:${styleKey}:${pronounKey}`;
@@ -675,6 +681,7 @@ window.LyricsPlus.TranslationCoordinator = {
 							taskId: cacheKey2,
 							onReasoningProgress: handleReasoningProgress,
 							trackMetadata,
+							revision,
 						});
 						
 						// If successful, remove from dead keys and break
@@ -768,6 +775,9 @@ window.LyricsPlus.TranslationCoordinator = {
 
                 let lines = Array.isArray(outText) ? outText : (typeof outText === 'string' ? outText.split("\n") : null);
                 if (!lines) throw new Error("Invalid translation format.");
+				if (revision && (lines.length !== lyrics.length || lines.some((line, i) => typeof line !== "string" || (!line.trim() && lyrics[i].text.trim())))) {
+					throw new Error(getText("revision.invalidResult"));
+				}
 
                 const mapped = lyrics.map((line, i) => ({
                     ...line,
@@ -776,7 +786,7 @@ window.LyricsPlus.TranslationCoordinator = {
                 }));
 
                 // --- 6. SAVE TO CACHE (Fire & Forget) ---
-                CacheManager.set(cacheKey2, mapped);
+                if (!revision) CacheManager.set(cacheKey2, mapped);
 
                 return mapped;
 
@@ -1128,6 +1138,43 @@ window.LyricsPlus.TranslationCoordinator = {
 			self.setState({ isCached: false });
 		} catch (e) {
 			console.error("[Lyrics+] Failed to delete from IndexedDB:", e);
+		}
+	},
+
+	async reviseTranslation(self, uri, feedback = "") {
+		if (self._revisionBusy) throw new Error(getText("revision.busy"));
+		if (self.state.uri !== uri || self.currentTrackUri !== uri) throw new Error(getText("revision.trackChanged"));
+		const signature = () => JSON.stringify([CONFIG.visual["translate:target-language"] || "vi", CONFIG.visual["translate:translation-style"] || "smart_adaptive", CONFIG.visual["translate:pronoun-mode"] || "default", CONFIG.visual["gemini:model"], CONFIG.visual["gemini:endpoint"], CONFIG.visual["gemini:reasoning-effort"], CONFIG.visual["gemini:response-mode"]]);
+		const settings = signature();
+		const state = { ...self.state };
+		const source = state[CONFIG.modes[state.mode]] || state.synced || state.unsynced;
+		if (!Array.isArray(source) || !source.length) throw new Error(getText("revision.noLyrics"));
+		const lyrics = source.map(line => ({ ...line, text: typeof line.text === "string" ? line.text : Array.isArray(line.text) ? line.text.map(word => word.word || "").join("") : "" }));
+		self._revisionBusy = true;
+		self._revisionUri = uri;
+		self._revisionVersions = self._revisionVersions || {};
+		self._revisionVersions[uri] = (self._revisionVersions[uri] || 0) + 1;
+		try {
+			// Let existing automatic work finish before replacing its cache/result.
+			await Promise.allSettled([...self._inflightGemini?.entries() || []].filter(([key]) => key.startsWith(`${uri}:`)).map(([, task]) => task.promise));
+			if (self.state.uri !== uri || self.currentTrackUri !== uri || signature() !== settings) throw new Error(getText("revision.trackChanged"));
+			const previous = self._dmResults?.[uri]?.gemini_vi || state.currentLyrics || [];
+			const revision = { feedback: String(feedback).trim().slice(0, 2000), previous: previous.map(line => ({ original: line.originalText || "", translation: typeof line.text === "string" ? line.text : "" })) };
+			const result = await this.getGeminiTranslation(self, state, lyrics, "gemini_vi", false, revision);
+			const currentSource = self.state[CONFIG.modes[self.state.mode]] || self.state.synced || self.state.unsynced;
+			if (self.state.uri !== uri || self.currentTrackUri !== uri || signature() !== settings || currentSource !== source) throw new Error(getText("revision.trackChanged"));
+			const [targetLang, styleKey, pronounKey] = JSON.parse(settings);
+			const key = targetLang === "vi" ? `${uri}:gemini_vi:${styleKey}:${pronounKey}` : `${uri}:${targetLang}:gemini_vi:${styleKey}:${pronounKey}`;
+			await CacheManager.set(key, result);
+			if (self.state.uri !== uri || self.currentTrackUri !== uri || signature() !== settings) throw new Error(getText("revision.trackChanged"));
+			self._dmResults = self._dmResults || {};
+			self._dmResults[uri] = { ...self._dmResults[uri], gemini_vi: result };
+			self._failedFetches?.[uri]?.delete("gemini_vi");
+			this.lyricsSource(self, self.state, self.state.mode);
+			return result;
+		} finally {
+			self._revisionBusy = false;
+			self._revisionUri = null;
 		}
 	},
 

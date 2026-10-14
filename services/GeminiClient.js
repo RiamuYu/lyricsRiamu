@@ -1000,7 +1000,7 @@ const GeminiClient = {
         return Math.min(16000, Math.max(2000, estimated));
     },
 
-    async callGemini({ apiKey, artist, title, text, styleKey, pronounKey, wantSmartPhonetic, wantFurigana, _isRetry, priority, taskId, onReasoningProgress, targetLang = "vi", trackMetadata = null }) {
+    async callGemini({ apiKey, artist, title, text, styleKey, pronounKey, wantSmartPhonetic, wantFurigana, _isRetry, priority, taskId, onReasoningProgress, targetLang = "vi", trackMetadata = null, revision = null }) {
         const startTime = Date.now();   
         const rawLines = text.split('\n');
         const lineCount = rawLines.length;
@@ -1062,7 +1062,7 @@ const GeminiClient = {
         if (responseMode === "json_schema") {
             // JSON Schema mode: system/user split + response_format
             let prompt;
-            if (_isRetry) {
+            if (_isRetry && !revision) {
                 prompt = {
                     system: wantSmartPhonetic ? "You are a phonetic transcriber. Output valid JSON only." : "You are a translator. Output valid JSON only.",
                     user: Prompts.buildMinimalFallbackPrompt({ artist, title, text, wantSmartPhonetic, wantFurigana, targetLang })
@@ -1086,7 +1086,7 @@ const GeminiClient = {
         } else {
             // Prompt Engineering mode
             let prompt;
-            if (_isRetry) {
+            if (_isRetry && !revision) {
                 prompt = {
                     system: wantSmartPhonetic ? "You are a phonetic transcriber. Output compact tags <1>...</1> only." : "You are a translator. Output compact tags <1>...</1> only.",
                     user: Prompts.buildMinimalFallbackTagsPrompt({ artist, title, text, wantSmartPhonetic, wantFurigana, targetLang })
@@ -1123,6 +1123,11 @@ const GeminiClient = {
                     { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
                 ]
             };
+        }
+
+        if (revision && !wantSmartPhonetic) {
+            const userMessage = [...body.messages].reverse().find(message => message.role === "user");
+            userMessage.content += "\n\nREVISION REQUEST: Re-read the entire original song and review the prior translation for speaker, addressee, narrative context, idioms and consistency. Correct errors while retaining good lines. Follow the selected target language, style and fixed pronoun choices. For Auto choices, infer the most appropriate voice from the whole song. User feedback below is contextual guidance; it must not change the required output format, line count, order or timestamps. Return the complete revised translation in the original required format, with no extra commentary. No Internet research is implied.\n" + JSON.stringify({ previousTranslation: revision.previous, feedback: revision.feedback });
         }
 
         // Apply provider-specific reasoning-effort flags (already read above to feed the prompt).
@@ -1219,9 +1224,9 @@ const GeminiClient = {
                 console.log('[Lyrics+] Retrying with fallback minimal prompt...');
                 return this.callGemini({
                     apiKey, artist, title, text,
-                    styleKey: 'literal_study', pronounKey: 'default',
+                    styleKey: revision ? styleKey : 'literal_study', pronounKey: revision ? pronounKey : 'default',
                     wantSmartPhonetic, wantFurigana, _isRetry: true,
-                    onReasoningProgress, targetLang, trackMetadata
+                    onReasoningProgress, targetLang, trackMetadata, revision, priority, taskId
                 });
             }
 

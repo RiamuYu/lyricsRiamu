@@ -1858,3 +1858,11 @@ body.lp-lyrics-fullscreen .lp-fullscreen { background-color: #0b0d10; }
   opacity: 1 !important;
   transform: translateX(0);
 }
+
+.lp-revision-form { display: flex; flex-direction: column; gap: 14px; padding: 8px; }
+#lyrics-plus-config-container .lp-revision-form select, .lp-revision-form textarea { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+.lp-revision-form textarea { resize: vertical; min-height: 140px; padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.05); color: inherit; font: inherit; }
+.lp-revision-note, .lp-revision-form small { opacity: .7; font-size: 13px; line-height: 1.5; }
+.lp-revision-actions { display: flex; justify-content: flex-end; gap: 12px; }
+.lp-revision-actions button { border: 1px solid rgba(255,255,255,.2); border-radius: 8px; background: rgba(255,255,255,.08); padding: 10px 16px; color: inherit; cursor: pointer; }
+.lp-revision-actions button:disabled { opacity: .45; cursor: default; }
